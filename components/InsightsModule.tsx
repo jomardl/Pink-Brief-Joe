@@ -17,7 +17,6 @@ import {
   Sparkles,
   Edit2,
   Save,
-  X,
   Zap
 } from 'lucide-react';
 import { ExtractedInsight, BriefData } from '../types';
@@ -33,8 +32,11 @@ interface Props {
 const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, selectedInsight }) => {
   const [localInsights, setLocalInsights] = useState<ExtractedInsight[]>(extractedInsights);
   const [expandedIndices, setExpandedIndices] = useState<Set<number | string>>(new Set());
+  
+  // Find initial selection index
+  const initialIndex = extractedInsights.findIndex(i => i.insight === selectedInsight);
   const [localSelected, setLocalSelected] = useState<number | string | null>(
-    selectedInsight ? extractedInsights.findIndex(i => i.insight === selectedInsight) : null
+    initialIndex !== -1 ? initialIndex : (selectedInsight ? 'bespoke' : null)
   );
 
   // Editing State
@@ -45,7 +47,17 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
   // Bespoke Insight State
   const [bespokeInput, setBespokeInput] = useState('');
   const [isTestingBespoke, setIsTestingBespoke] = useState(false);
-  const [bespokeResult, setBespokeResult] = useState<ExtractedInsight | null>(null);
+  const [bespokeResult, setBespokeResult] = useState<ExtractedInsight | null>(
+    (selectedInsight && initialIndex === -1) ? {
+      insight: selectedInsight,
+      plainEnglishExplanation: 'Bespoke strategic insight',
+      rank: 99,
+      reasoning: 'User defined insight',
+      verbatims: [],
+      matchPercentage: 100,
+      mentionCount: 1
+    } : null
+  );
 
   useEffect(() => {
     setLocalInsights(extractedInsights);
@@ -63,7 +75,7 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
   };
 
   const handleSelect = (id: number | string) => {
-    if (editingId !== null) return; // Prevent selection while editing
+    if (editingId !== null) return;
     setLocalSelected(id);
   };
 
@@ -108,8 +120,18 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
 
   const getSelectedText = () => {
     if (localSelected === 'bespoke' && bespokeResult) return bespokeResult.insight;
-    if (typeof localSelected === 'number') return localInsights[localSelected].insight;
+    if (typeof localSelected === 'number' && localSelected >= 0) {
+      return localInsights[localSelected]?.insight || '';
+    }
     return '';
+  };
+
+  const handleGo = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const text = getSelectedText();
+    if (text) {
+      onNext({ selectedInsight: text });
+    }
   };
 
   const renderInsightCard = (item: ExtractedInsight, id: number | string) => {
@@ -120,13 +142,14 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
     return (
       <motion.div 
         key={id}
+        layout
         initial={{ opacity: 0, x: -20 }}
         animate={{ opacity: 1, x: 0 }}
         onClick={() => handleSelect(id)}
         className={`group relative flex flex-col bg-white border-2 rounded-[2.5rem] transition-all cursor-pointer overflow-hidden ${
           isSelected 
-            ? 'border-[#003da5] shadow-2xl shadow-blue-100 ring-8 ring-blue-50/50' 
-            : 'border-slate-50 hover:border-blue-100 hover:shadow-xl'
+            ? 'border-[#003da5] shadow-2xl shadow-blue-100 ring-8 ring-blue-50/50 scale-[1.01] pb-28' 
+            : 'border-slate-50 hover:border-blue-100 hover:shadow-xl pb-8'
         }`}
       >
         <div className="p-8 space-y-6">
@@ -158,7 +181,11 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
                 </button>
               )}
               {isSelected && (
-                <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-100">
+                <motion.div 
+                  initial={{ scale: 0 }} 
+                  animate={{ scale: 1 }} 
+                  className="w-10 h-10 bg-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-100"
+                >
                   <Check size={20} strokeWidth={3} />
                 </motion.div>
               )}
@@ -236,23 +263,20 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
           </AnimatePresence>
         </div>
         
-        {/* Let's Go Button Overlay (Animate on selection) */}
+        {/* Let's Go Button - Dedicated action zone in bottom right of card */}
         <AnimatePresence>
           {isSelected && !isEditing && (
             <motion.div 
-              initial={{ opacity: 0, y: 50, scale: 0.8 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 20, scale: 0.8 }}
-              className="absolute right-8 top-1/2 -translate-y-1/2 z-10 hidden lg:block"
+              initial={{ opacity: 0, scale: 0.8, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 10 }}
+              className="absolute bottom-6 right-8 z-20"
             >
               <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onNext({ selectedInsight: getSelectedText() });
-                }}
-                className="px-8 py-5 bg-[#003da5] text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.3em] flex items-center gap-3 hover:bg-blue-800 shadow-2xl shadow-blue-300 transition-all hover:scale-110 active:scale-95 group"
+                onClick={handleGo}
+                className="px-10 py-5 bg-[#003da5] text-white rounded-[2rem] font-black text-sm uppercase tracking-[0.3em] flex items-center gap-3 hover:bg-blue-800 shadow-[0_20px_40px_rgba(0,61,165,0.4)] transition-all hover:scale-105 active:scale-95 group border-2 border-white/20"
               >
-                Let's go <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
+                Let's go <ChevronRight size={22} className="group-hover:translate-x-1 transition-transform" />
               </button>
             </motion.div>
           )}
@@ -269,7 +293,7 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
         </div>
         <h2 className="text-4xl font-black text-slate-900 tracking-tight">Market Insights</h2>
         <p className="text-slate-500 max-w-lg mx-auto text-lg leading-relaxed">
-          Select the strategic "North Star" for your brief. You can now edit any insight to better reflect your intuition.
+          Select the strategic "North Star" for your brief. Click any card to reveal the primary action.
         </p>
       </div>
 
@@ -317,32 +341,29 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
         </div>
       </div>
 
-      {/* Persistent Bottom Button for Mobile/Alternative */}
+      {/* Persistent Bottom Button */}
       <div className="flex justify-end pt-12 border-t border-slate-100">
         <button 
-          onClick={() => onNext({ selectedInsight: getSelectedText() })} 
-          disabled={!localSelected}
-          className="px-14 py-6 bg-[#003da5] text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.3em] flex items-center gap-3 hover:bg-blue-800 shadow-2xl shadow-blue-200 transition-all disabled:opacity-50"
+          onClick={handleGo} 
+          disabled={localSelected === null}
+          className="px-14 py-6 bg-[#003da5] text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.3em] flex items-center gap-3 hover:bg-blue-800 shadow-2xl shadow-blue-200 transition-all disabled:opacity-50 active:scale-95"
         >
           Confirm Strategy <ChevronRight size={20} />
         </button>
       </div>
 
-      {/* Floating Let's Go for the bottom of the screen if anything is selected */}
+      {/* Mobile Floating Hint */}
       <AnimatePresence>
-        {localSelected && (
+        {localSelected !== null && (
           <motion.div 
             initial={{ opacity: 0, y: 100 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 100 }}
-            className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 lg:hidden"
+            className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 lg:hidden pointer-events-none"
           >
-            <button 
-              onClick={() => onNext({ selectedInsight: getSelectedText() })}
-              className="px-12 py-6 bg-green-600 text-white rounded-full font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-green-200 flex items-center gap-4"
-            >
-              <Zap size={20} fill="currentColor" /> Let's go
-            </button>
+            <div className="px-12 py-6 bg-[#003da5] text-white rounded-full font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-blue-300 flex items-center gap-4 border-4 border-white opacity-90">
+              <Zap size={20} fill="currentColor" /> Strategy Locked
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
