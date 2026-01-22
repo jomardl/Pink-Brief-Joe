@@ -8,9 +8,10 @@ import { BriefData } from '../types';
 interface Props {
   onNext: (data: Partial<BriefData>) => void;
   currentData: string;
+  onProcessing: (val: boolean) => void;
 }
 
-const ResearchModule: React.FC<Props> = ({ onNext, currentData }) => {
+const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) => {
   const [text, setText] = useState(currentData);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -21,6 +22,7 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData }) => {
 
     setFileName(file.name);
     setIsProcessing(true);
+    onProcessing(true);
 
     const reader = new FileReader();
     const isTextLike = file.type === "text/plain" || 
@@ -34,10 +36,10 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData }) => {
         const content = event.target?.result as string;
         setText(content);
         setIsProcessing(false);
+        onProcessing(false);
       };
       reader.readAsText(file);
     } else {
-      // Basic fallback simulation for Word/PDF extraction
       setTimeout(() => {
         const simulatedText = `Extracted Research Data from ${file.name}:
         Consumers often express frustration with current products feeling bulky.
@@ -46,6 +48,7 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData }) => {
         Research identifies a significant gap in high-performance slim options.`;
         setText(simulatedText);
         setIsProcessing(false);
+        onProcessing(false);
       }, 1200);
     }
   };
@@ -53,6 +56,7 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData }) => {
   const handleProcess = async () => {
     if (!text.trim()) return;
     setIsProcessing(true);
+    onProcessing(true);
     try {
       const results = await extractRankedInsights(text);
       onNext({ 
@@ -63,6 +67,7 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData }) => {
       console.error(err);
     } finally {
       setIsProcessing(false);
+      onProcessing(false);
     }
   };
 
@@ -74,7 +79,7 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData }) => {
         </div>
         <h2 className="text-4xl font-black text-slate-900 tracking-tight">Import Research</h2>
         <p className="text-slate-500 max-w-lg mx-auto text-lg leading-relaxed">
-          Upload your consumer verbatims or research reports. We will analyze the content strictly based on your document.
+          Upload your consumer research verbatims or research reports
         </p>
       </div>
 

@@ -17,9 +17,11 @@ import {
   Sparkles,
   Edit2,
   Save,
-  Zap
+  X,
+  TrendingUp,
+  FileSearch
 } from 'lucide-react';
-import { ExtractedInsight, BriefData } from '../types';
+import { ExtractedInsight, BriefData, Mention } from '../types';
 import { testBespokeInsight } from '../geminiService';
 
 interface Props {
@@ -27,24 +29,107 @@ interface Props {
   research: string;
   extractedInsights: ExtractedInsight[];
   selectedInsight: string;
+  onProcessing: (val: boolean) => void;
 }
 
-const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, selectedInsight }) => {
+const MentionsOverlay: React.FC<{
+  insight: ExtractedInsight;
+  onClose: () => void;
+  layoutId: string;
+}> = ({ insight, onClose, layoutId }) => {
+  const sortedMentions = [...(insight.mentions || [])].sort((a, b) => b.relevanceScore - a.relevanceScore);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-6 md:p-12"
+    >
+      <motion.div 
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+        onClick={onClose}
+        className="absolute inset-0 bg-slate-900/60 backdrop-blur-xl" 
+      />
+      
+      <motion.div 
+        layoutId={layoutId}
+        className="relative w-full max-w-3xl bg-white rounded-[3rem] shadow-[0_50px_100px_rgba(0,0,0,0.3)] overflow-hidden flex flex-col max-h-[85vh]"
+      >
+        <div className="p-8 md:p-10 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200">
+              <MessageSquare size={28} />
+            </div>
+            <div>
+              <h3 className="text-xl font-black text-slate-900 tracking-tight">Supporting Evidence</h3>
+              <p className="text-xs font-black uppercase tracking-widest text-blue-500 mt-1">
+                {insight.mentionCount} unique quotes extracted
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="w-12 h-12 flex items-center justify-center bg-white hover:bg-slate-100 rounded-full border border-slate-200 text-slate-400 hover:text-slate-900 transition-all"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-8 md:p-10 space-y-6">
+          <div className="bg-blue-50/50 p-6 rounded-[2rem] border border-blue-100 mb-4">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 mb-2">Research Footprint</p>
+            <p className="text-lg font-black text-slate-800 italic leading-snug">"{insight.totalEvidenceFrequency}"</p>
+          </div>
+
+          {sortedMentions.map((mention, idx) => (
+            <motion.div 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: idx * 0.05 }}
+              key={idx} 
+              className="group relative bg-white border border-slate-100 p-8 rounded-[2.5rem] hover:border-blue-200 hover:shadow-xl hover:shadow-blue-50 transition-all"
+            >
+              <div className="absolute top-6 right-8 flex items-center gap-2 px-3 py-1 bg-green-50 text-green-700 rounded-full text-[10px] font-black uppercase tracking-wider">
+                <TrendingUp size={12} /> {mention.relevanceScore}% Relevant
+              </div>
+              <Quote size={24} className="text-blue-100 mb-4" />
+              <p className="text-base font-bold text-slate-700 leading-relaxed italic pr-12">
+                "{mention.text}"
+              </p>
+            </motion.div>
+          ))}
+        </div>
+        
+        <div className="p-8 border-t border-slate-100 bg-slate-50/30">
+          <button 
+            onClick={onClose}
+            className="w-full py-5 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-[0.3em] hover:bg-slate-800 transition-all"
+          >
+            Close Evidence Window
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+};
+
+const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, selectedInsight, onProcessing }) => {
   const [localInsights, setLocalInsights] = useState<ExtractedInsight[]>(extractedInsights);
   const [expandedIndices, setExpandedIndices] = useState<Set<number | string>>(new Set());
+  const [activeMentionsOverlay, setActiveMentionsOverlay] = useState<number | string | null>(null);
   
-  // Find initial selection index
   const initialIndex = extractedInsights.findIndex(i => i.insight === selectedInsight);
   const [localSelected, setLocalSelected] = useState<number | string | null>(
     initialIndex !== -1 ? initialIndex : (selectedInsight ? 'bespoke' : null)
   );
 
-  // Editing State
   const [editingId, setEditingId] = useState<number | string | null>(null);
   const [tempInsight, setTempInsight] = useState('');
   const [tempExplanation, setTempExplanation] = useState('');
 
-  // Bespoke Insight State
   const [bespokeInput, setBespokeInput] = useState('');
   const [isTestingBespoke, setIsTestingBespoke] = useState(false);
   const [bespokeResult, setBespokeResult] = useState<ExtractedInsight | null>(
@@ -54,8 +139,10 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
       rank: 99,
       reasoning: 'User defined insight',
       verbatims: [],
+      mentions: [],
       matchPercentage: 100,
-      mentionCount: 1
+      mentionCount: 1,
+      totalEvidenceFrequency: "Custom hypothesis"
     } : null
   );
 
@@ -106,6 +193,7 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
   const handleTestBespoke = async () => {
     if (!bespokeInput.trim()) return;
     setIsTestingBespoke(true);
+    onProcessing(true);
     try {
       const result = await testBespokeInsight(research, bespokeInput);
       const newBespoke = { ...result, rank: 99 };
@@ -115,6 +203,7 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
       console.error(err);
     } finally {
       setIsTestingBespoke(false);
+      onProcessing(false);
     }
   };
 
@@ -138,6 +227,8 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
     const isSelected = localSelected === id;
     const isExpanded = expandedIndices.has(id);
     const isEditing = editingId === id;
+    const sortedMentions = [...(item.mentions || [])].sort((a, b) => b.relevanceScore - a.relevanceScore);
+    const topMentions = sortedMentions.slice(0, 4);
 
     return (
       <motion.div 
@@ -154,19 +245,28 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
       >
         <div className="p-8 space-y-6">
           <div className="flex items-start justify-between">
-            <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl transition-all ${
-                isSelected ? 'bg-[#003da5] text-white' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'
-              }`}>
-                {typeof id === 'number' ? id + 1 : <Sparkles size={24} />}
+            <div className="flex flex-col gap-3">
+              <div className="flex items-center gap-4">
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-2xl transition-all ${
+                  isSelected ? 'bg-[#003da5] text-white' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'
+                }`}>
+                  {typeof id === 'number' ? id + 1 : <Sparkles size={24} />}
+                </div>
+                <div className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-50 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-wider border border-blue-100">
+                  <FileSearch size={14} /> {item.totalEvidenceFrequency}
+                </div>
               </div>
               <div className="flex flex-wrap gap-2">
-                <div className="flex items-center gap-1.5 px-4 py-1.5 bg-green-50 text-green-700 rounded-full text-[10px] font-black uppercase tracking-wider">
+                <div className="flex items-center gap-1.5 px-4 py-1.5 bg-green-50 text-green-700 rounded-full text-[10px] font-black uppercase tracking-wider border border-green-100">
                   <BarChart3 size={14} /> {item.matchPercentage}% Relevance
                 </div>
-                <div className="flex items-center gap-1.5 px-4 py-1.5 bg-blue-50 text-blue-700 rounded-full text-[10px] font-black uppercase tracking-wider">
-                  <MessageSquare size={14} /> {item.mentionCount} Mentions
-                </div>
+                <motion.button 
+                  layoutId={`mention-btn-${id}`}
+                  onClick={(e) => { e.stopPropagation(); setActiveMentionsOverlay(id); }}
+                  className="flex items-center gap-1.5 px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-[10px] font-black uppercase tracking-wider border border-indigo-100 hover:bg-indigo-600 hover:text-white transition-all shadow-sm"
+                >
+                  <MessageSquare size={14} /> {item.mentionCount} Quotes Available
+                </motion.button>
               </div>
             </div>
             
@@ -235,7 +335,7 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
               onClick={(e) => toggleVerbatims(id, e)} 
               className="flex items-center gap-2 text-xs font-black text-[#003da5] uppercase tracking-widest hover:underline"
             >
-              {isExpanded ? <><ChevronUp size={16} /> Hide Evidence</> : <><ChevronDown size={16} /> View Verbatims ({item.verbatims?.length || 0})</>}
+              {isExpanded ? <><ChevronUp size={16} /> Hide Quotes</> : <><ChevronDown size={16} /> Preview Best Evidence ({topMentions.length})</>}
             </button>
           </div>
 
@@ -248,22 +348,18 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
                 className="overflow-hidden"
               >
                 <div className="pt-6 border-t border-slate-50 grid gap-3">
-                  {item.verbatims?.map((quote, idx) => (
-                    <div key={idx} className="bg-slate-50/70 p-5 rounded-2xl text-sm text-slate-600 italic relative border border-white">
+                  {topMentions.map((mention, idx) => (
+                    <div key={idx} className="bg-slate-50/70 p-5 rounded-2xl text-sm text-slate-600 italic relative border border-white group/quote">
                       <Quote size={12} className="absolute top-4 left-2 text-slate-200" />
-                      <span className="pl-6 inline-block">"{quote}"</span>
+                      <span className="pl-6 inline-block">"{mention.text}"</span>
                     </div>
                   ))}
-                  {(!item.verbatims || item.verbatims.length === 0) && (
-                    <p className="text-sm text-slate-400 p-4">No specific verbatims found for this insight.</p>
-                  )}
                 </div>
               </motion.div>
             )}
           </AnimatePresence>
         </div>
         
-        {/* Let's Go Button - Dedicated action zone in bottom right of card */}
         <AnimatePresence>
           {isSelected && !isEditing && (
             <motion.div 
@@ -276,7 +372,7 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
                 onClick={handleGo}
                 className="px-10 py-5 bg-[#003da5] text-white rounded-[2rem] font-black text-sm uppercase tracking-[0.3em] flex items-center gap-3 hover:bg-blue-800 shadow-[0_20px_40px_rgba(0,61,165,0.4)] transition-all hover:scale-105 active:scale-95 group border-2 border-white/20"
               >
-                Let's go <ChevronRight size={22} className="group-hover:translate-x-1 transition-transform" />
+                Select Truth <ChevronRight size={22} className="group-hover:translate-x-1 transition-transform" />
               </button>
             </motion.div>
           )}
@@ -292,9 +388,6 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
           <Lightbulb size={36} />
         </div>
         <h2 className="text-4xl font-black text-slate-900 tracking-tight">Market Insights</h2>
-        <p className="text-slate-500 max-w-lg mx-auto text-lg leading-relaxed">
-          Select the strategic "North Star" for your brief. Click any card to reveal the primary action.
-        </p>
       </div>
 
       <div className="grid gap-6 flex-1">
@@ -302,7 +395,6 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
         
         {bespokeResult && renderInsightCard(bespokeResult, 'bespoke')}
 
-        {/* Bespoke Input Section */}
         <div className="mt-12 p-10 bg-indigo-50/50 border-2 border-dashed border-indigo-200 rounded-[3rem] space-y-8">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200">
@@ -341,30 +433,13 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
         </div>
       </div>
 
-      {/* Persistent Bottom Button */}
-      <div className="flex justify-end pt-12 border-t border-slate-100">
-        <button 
-          onClick={handleGo} 
-          disabled={localSelected === null}
-          className="px-14 py-6 bg-[#003da5] text-white rounded-[2rem] font-black text-xs uppercase tracking-[0.3em] flex items-center gap-3 hover:bg-blue-800 shadow-2xl shadow-blue-200 transition-all disabled:opacity-50 active:scale-95"
-        >
-          Confirm Strategy <ChevronRight size={20} />
-        </button>
-      </div>
-
-      {/* Mobile Floating Hint */}
       <AnimatePresence>
-        {localSelected !== null && (
-          <motion.div 
-            initial={{ opacity: 0, y: 100 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 100 }}
-            className="fixed bottom-12 left-1/2 -translate-x-1/2 z-50 lg:hidden pointer-events-none"
-          >
-            <div className="px-12 py-6 bg-[#003da5] text-white rounded-full font-black text-sm uppercase tracking-[0.2em] shadow-2xl shadow-blue-300 flex items-center gap-4 border-4 border-white opacity-90">
-              <Zap size={20} fill="currentColor" /> Strategy Locked
-            </div>
-          </motion.div>
+        {activeMentionsOverlay !== null && (
+          <MentionsOverlay 
+            insight={activeMentionsOverlay === 'bespoke' ? bespokeResult! : localInsights[activeMentionsOverlay as number]}
+            onClose={() => setActiveMentionsOverlay(null)}
+            layoutId={`mention-btn-${activeMentionsOverlay}`}
+          />
         )}
       </AnimatePresence>
     </div>
