@@ -2,8 +2,8 @@
 import React, { useState } from 'react';
 import { Upload, FileText, ChevronRight, X, Loader2, Sparkles, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { extractRankedInsights } from '../geminiService';
-import { BriefData } from '../types';
+import { extractRankedInsights } from '../geminiService.ts';
+import { BriefData } from '../types.ts';
 
 interface Props {
   onNext: (data: Partial<BriefData>) => void;
@@ -42,8 +42,6 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) 
       };
       reader.readAsText(file);
     } else {
-      // Logic for PDFs/Docs: In a real env we would use an OCR or PDF parser service.
-      // Here we provide a detailed hint to the user.
       setTimeout(() => {
         const simulatedText = `Extracted Research Data from ${file.name}:
         Consumers often express frustration with current products feeling bulky.

@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Target, Sparkles, ChevronRight, Loader2 } from 'lucide-react';
-import { analyzeResearch } from '../geminiService';
-import { BriefData } from '../types';
+import { analyzeResearch } from '../geminiService.ts';
+import { BriefData } from '../types.ts';
 
 interface Props {
   onNext: (data: Partial<BriefData>) => void;

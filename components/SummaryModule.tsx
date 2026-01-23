@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Download, Printer, RefreshCw, Loader2, Edit2, Plus, Trash2, FileText } from 'lucide-react';
-import { generatePinkBrief } from '../geminiService';
-import { BriefData, PinkBriefContent, Deliverable } from '../types';
+import { Download, Printer, Loader2, Edit2, Plus, Trash2, FileText } from 'lucide-react';
+import { generatePinkBrief } from '../geminiService.ts';
+import { BriefData, PinkBriefContent, Deliverable } from '../types.ts';
 
 const MagentaHeader = ({ title }: { title: string }) => (
   <div className="bg-[#c2185b] text-white px-6 py-2 mb-4">

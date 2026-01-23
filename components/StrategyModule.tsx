@@ -5,8 +5,8 @@ import {
    BookOpen, ChevronRight, Printer, Download, Sparkles, 
   ChevronDown, Edit3, Check, Save, AlertCircle, Quote, RefreshCcw
 } from 'lucide-react';
-import { performStrategicSynthesis } from '../geminiService';
-import { BriefData, StrategicSection } from '../types';
+import { performStrategicSynthesis } from '../geminiService.ts';
+import { BriefData, StrategicSection } from '../types.ts';
 
 interface Props {
   onNext: (data: Partial<BriefData>) => void;
@@ -14,40 +14,48 @@ interface Props {
   onProcessing: (val: boolean) => void;
 }
 
-const TIMEOUT_MS = 45000; // 45 second hard timeout
+const HARD_TIMEOUT_MS = 60000; 
 
 const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) => {
   const [sections, setSections] = useState<StrategicSection[]>(briefData.marketingSummarySections || []);
-  const [summaryMeta, setSummaryMeta] = useState({ essence: "Red Thread", unlock: "The Strategic Unlock" });
+  const [summaryMeta, setSummaryMeta] = useState({ 
+    essence: briefData.redThreadEssence || "Red Thread", 
+    unlock: "The Strategic Unlock" 
+  });
   const [isLoading, setIsLoading] = useState(false);
+  const [status, setStatus] = useState("Architecting Strategic Logic...");
   const [error, setError] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<string | null>(null);
 
-  const fetchAttempted = useRef(false);
+  const fetchStatus = useRef<'idle' | 'processing' | 'done'>('idle');
 
   useEffect(() => {
     const initSynthesis = async () => {
-      if (fetchAttempted.current || isLoading) return;
-      if (sections.length > 0) {
-        fetchAttempted.current = true;
-        return;
-      }
+      if (fetchStatus.current !== 'idle' || sections.length > 0) return;
 
       setIsLoading(true);
       onProcessing(true);
       setError(null);
-      fetchAttempted.current = true;
+      fetchStatus.current = 'processing';
 
-      // Wrap the fetch in a timeout promise
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error("Strategic synthesis timed out. The AI models are currently under heavy load.")), TIMEOUT_MS)
+      const statusInterval = setInterval(() => {
+        setStatus(prev => {
+          if (prev.includes("Architecting")) return "Distilling Qualitative Data...";
+          if (prev.includes("Distilling")) return "Calibrating Human Truths...";
+          if (prev.includes("Calibrating")) return "Finalizing Global Narrative...";
+          return "Almost there, securing logic...";
+        });
+      }, 12000);
+
+      const hardTimeout = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error("The AI engine took too long to respond. Please try again.")), HARD_TIMEOUT_MS)
       );
 
       try {
         const result: any = await Promise.race([
           performStrategicSynthesis(briefData.researchText, briefData.selectedInsight),
-          timeoutPromise
+          hardTimeout
         ]);
 
         if (result && result.sections) {
@@ -57,13 +65,16 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
             unlock: result.redThreadUnlock || "The Strategic Unlock"
           });
           if (result.sections.length > 0) setExpandedSection(result.sections[0].id);
+          fetchStatus.current = 'done';
         } else {
-          throw new Error("Invalid synthesis result received.");
+          throw new Error("Received a malformed strategic response from the AI.");
         }
       } catch (err: any) {
-        console.error("Strategic Module Error:", err);
-        setError(err.message || "Synthesis failed. Please verify your connection and try again.");
+        console.error("Strategic Module Component Error:", err);
+        setError(err.message || "A network or parsing error occurred.");
+        fetchStatus.current = 'idle';
       } finally {
+        clearInterval(statusInterval);
         setIsLoading(false);
         onProcessing(false);
       }
@@ -71,6 +82,13 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
 
     initSynthesis();
   }, []);
+
+  const handleManualRetry = () => {
+    fetchStatus.current = 'idle';
+    setSections([]);
+    setError(null);
+    window.location.reload();
+  };
 
   const updateSectionContent = (id: string, field: 'content' | 'summary', val: string) => {
     setSections(prev => prev.map(s => s.id === id ? { ...s, [field]: val } : s));
@@ -89,19 +107,18 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
       <div className="flex-1 flex flex-col items-center justify-center p-24 text-center space-y-8 h-full">
         <div className="p-8 bg-rose-50 text-rose-500 rounded-full shadow-inner"><AlertCircle size={64} /></div>
         <div className="space-y-4">
-          <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tight">Synthesis Blocked</h3>
+          <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tight">System Interrupted</h3>
           <p className="text-slate-500 max-w-md mx-auto font-medium leading-relaxed">
             {error}
           </p>
         </div>
         <div className="flex flex-col gap-4">
           <button 
-            onClick={() => window.location.reload()} 
+            onClick={handleManualRetry} 
             className="px-12 py-5 bg-[#003da5] text-white rounded-3xl font-black text-xs uppercase tracking-widest shadow-2xl shadow-blue-200 hover:scale-105 transition-all flex items-center gap-3"
           >
-            <RefreshCcw size={18} /> Retry Synthesis
+            <RefreshCcw size={18} /> Restart Module
           </button>
-          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Tip: Ensure your API key is correctly configured.</p>
         </div>
       </div>
     );
@@ -119,9 +136,9 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
           <BookOpen size={80} />
         </motion.div>
         <div className="text-center space-y-4">
-          <p className="text-slate-400 font-black uppercase tracking-[0.8em] text-[11px]">Architecting Strategy</p>
-          <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Synthesizing Deep Strategic Narrative</h2>
-          <p className="text-slate-400 max-w-md mx-auto text-sm font-medium">Interrogating research for logical consistency and human truth alignment...</p>
+          <p className="text-slate-400 font-black uppercase tracking-[0.8em] text-[11px]">Stress-Testing Logic</p>
+          <h2 className="text-3xl font-bold text-slate-800 tracking-tight">{status}</h2>
+          <p className="text-slate-400 max-w-md mx-auto text-sm font-medium italic">Gemini is synthesizing high-fidelity strategic rationale. This may take up to 45 seconds.</p>
         </div>
         <div className="w-80 h-2 bg-slate-100 rounded-full overflow-hidden border border-slate-50 shadow-inner">
           <motion.div 
@@ -137,14 +154,11 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
 
   return (
     <div className="max-w-6xl mx-auto py-12 flex flex-col h-full relative space-y-16">
-      
-      {/* 1. STRATEGIC NORTH STAR BANNER */}
       <section className="space-y-6">
         <div className="flex items-center gap-6">
           <div className="w-12 h-[3px] bg-rose-600 rounded-full" />
           <h3 className="text-sm font-black text-slate-400 uppercase tracking-[0.4em]">Strategic North Star</h3>
         </div>
-
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -155,7 +169,6 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
             <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-70 mb-2">Essence</span>
             <span className="text-4xl font-black tracking-tighter uppercase leading-none">{summaryMeta.essence}</span>
           </div>
-
           <div className="bg-[#003da5] text-white px-12 py-10 flex-1 flex flex-col justify-center relative">
             <Quote size={48} className="absolute top-6 right-8 opacity-10" />
             <span className="text-[10px] font-black uppercase tracking-[0.4em] opacity-70 mb-2">The Unlock</span>
@@ -165,8 +178,6 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
           </div>
         </motion.div>
       </section>
-
-      {/* 2. DEEP DIVE SECTIONS (Editorial Style) */}
       <section className="space-y-12">
         <div className="space-y-4 text-center">
           <div className="inline-flex items-center justify-center p-4 bg-indigo-50 text-indigo-600 rounded-[2rem] mb-2 shadow-sm border border-indigo-100">
@@ -177,12 +188,10 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
             A comprehensive expansion of the strategic logic beneath the North Star.
           </p>
         </div>
-
         <div className="space-y-6">
           {sections.map((section, idx) => {
             const isExpanded = expandedSection === section.id;
             const isEditing = editingSection === section.id;
-
             return (
               <motion.div 
                 key={section.id}
@@ -237,7 +246,6 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
                     </motion.div>
                   </div>
                 </div>
-
                 <AnimatePresence>
                   {isExpanded && (
                     <motion.div 
@@ -247,7 +255,6 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
                       className="overflow-hidden"
                     >
                       <div className="px-10 pb-12 pt-2 border-t border-slate-50 space-y-8">
-                        {/* THE BLUE GIST CARD */}
                         <div className="p-8 bg-blue-50/50 rounded-[2.5rem] border border-blue-100 shadow-inner relative overflow-hidden">
                           <div className="absolute top-0 right-0 p-4 opacity-5"><Sparkles size={64} /></div>
                           {isEditing ? (
@@ -263,8 +270,6 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
                             </p>
                           )}
                         </div>
-
-                        {/* DEEP PROSE CONTENT */}
                         <div className="relative p-2">
                           {isEditing ? (
                             <textarea 
@@ -282,7 +287,6 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
                             </div>
                           )}
                         </div>
-                        
                         {isEditing && (
                           <div className="flex justify-end pt-4">
                             <button 
@@ -302,8 +306,6 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
           })}
         </div>
       </section>
-
-      {/* FOOTER ACTIONS */}
       <div className="flex justify-between items-center py-12 border-t border-slate-200">
         <div className="flex gap-4">
           <button className="flex items-center gap-3 px-6 py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm">
@@ -313,7 +315,6 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
             <Download size={18} /> Export Strat
           </button>
         </div>
-
         <button 
           onClick={handleFinish}
           className="px-20 py-8 bg-[#003da5] text-white rounded-[3rem] font-black text-sm uppercase tracking-[0.4em] flex items-center gap-4 hover:bg-blue-800 shadow-[0_30px_60px_rgba(0,61,165,0.25)] hover:scale-105 active:scale-95 transition-all group"

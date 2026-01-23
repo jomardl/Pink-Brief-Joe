@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Users, Loader2, ChevronRight, UserCircle2 } from 'lucide-react';
-import { generatePersona } from '../geminiService';
-import { BriefData, Persona } from '../types';
+import { generatePersona } from '../geminiService.ts';
+import { BriefData, Persona } from '../types.ts';
 
 interface Props {
   onNext: (data: { targetAudience: BriefData['targetAudience'] }) => void;
@@ -12,7 +12,6 @@ interface Props {
 }
 
 const PersonaModule: React.FC<Props> = ({ onNext, research, selectedInsight, currentData }) => {
-  // Fixed: Ensure persona state is correctly typed and initialized from currentData
   const [persona, setPersona] = useState<Persona>(currentData || { name: '', description: '', insights: [] });
   const [isLoading, setIsLoading] = useState(false);
 

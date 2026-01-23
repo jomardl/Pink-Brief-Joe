@@ -1,11 +1,11 @@
 
-export type ModuleId = 1 | 2 | 3 | 4;
+export type ModuleId = 1 | 2 | 3 | 4 | 5 | 6;
 
 export interface RedThreadStep {
   label: string;
   content: string;
   imagePrompt: string;
-  userImage?: string; // Support for manual image uploads
+  userImage?: string; 
 }
 
 export interface Mention {
@@ -57,7 +57,7 @@ export interface StrategicSection {
   id: string;
   title: string;
   purpose: string;
-  summary: string; // The blue gist paragraph
+  summary: string; 
   content: string;
 }
 

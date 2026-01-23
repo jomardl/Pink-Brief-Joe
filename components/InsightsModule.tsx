@@ -17,14 +17,13 @@ import {
   Sparkles,
   Edit2,
   Save,
-  TrendingUp,
   FileSearch,
   Info,
   AlertTriangle,
   History
 } from 'lucide-react';
-import { ExtractedInsight, BriefData } from '../types';
-import { testBespokeInsight } from '../geminiService';
+import { ExtractedInsight, BriefData } from '../types.ts';
+import { testBespokeInsight } from '../geminiService.ts';
 
 interface Props {
   onNext: (data: Partial<BriefData>) => void;
@@ -82,12 +81,9 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
 
   const handleSelect = (id: number | string) => {
     if (editingId !== null) return;
-    
-    // Don't allow selecting bespoke if it's below threshold
     if (id === 'bespoke' && bespokeResult && (bespokeResult.matchPercentage < STRATEGIC_THRESHOLD || bespokeResult.mentionCount === 0)) {
         return;
     }
-    
     setLocalSelected(id);
   };
 
@@ -123,8 +119,6 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
       const result = await testBespokeInsight(research, bespokeInput);
       const newBespoke = { ...result, rank: 99 };
       setBespokeResult(newBespoke);
-      
-      // Only select if it passes threshold
       if (newBespoke.matchPercentage >= STRATEGIC_THRESHOLD && newBespoke.mentionCount > 0) {
         setLocalSelected('bespoke');
       } else {
@@ -354,7 +348,6 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
         
         {bespokeResult && renderInsightCard(bespokeResult, 'bespoke')}
 
-        {/* Interrogation Area - Span full width below the grid */}
         <div className="md:col-span-2 mt-8 p-10 bg-indigo-50/50 border-2 border-dashed border-indigo-200 rounded-[3rem] space-y-8">
           <div className="flex items-center gap-4">
             <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200">

@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { Zap, Sparkles, Loader2, ChevronRight, Volume2 } from 'lucide-react';
-import { suggestCreativeDirections } from '../geminiService';
-import { BriefData } from '../types';
+import { suggestCreativeDirections } from '../geminiService.ts';
+import { BriefData } from '../types.ts';
 
 interface Props {
   onNext: (data: Partial<BriefData>) => void;
@@ -19,7 +19,6 @@ const CreativeModule: React.FC<Props> = ({ onNext, briefData }) => {
     const fetchDirections = async () => {
       setIsLoading(true);
       try {
-        // Fixed: Use optional chaining to safely access redThread and targetAudience properties
         const results = await suggestCreativeDirections({
           objective: briefData.redThread?.find(s => s.label === 'Strategic Objective')?.content,
           proposition: briefData.redThread?.find(s => s.label === 'Core Proposition')?.content,
