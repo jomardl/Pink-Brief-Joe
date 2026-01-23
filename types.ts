@@ -5,11 +5,12 @@ export interface RedThreadStep {
   label: string;
   content: string;
   imagePrompt: string;
+  userImage?: string; // Support for manual image uploads
 }
 
 export interface Mention {
   text: string;
-  relevanceScore: number; // 0-100 scale
+  relevanceScore: number; 
 }
 
 export interface ExtractedInsight {
@@ -17,11 +18,11 @@ export interface ExtractedInsight {
   plainEnglishExplanation: string;
   rank: number;
   reasoning: string;
-  verbatims: string[]; // Legacy
+  verbatims: string[];
   mentions: Mention[];
   matchPercentage: number;
-  mentionCount: number; // Strictly the number of quotes in the 'mentions' array
-  totalEvidenceFrequency: string; // e.g., "32 mentions across 15 documents"
+  mentionCount: number;
+  totalEvidenceFrequency: string;
 }
 
 export interface Deliverable {
@@ -52,50 +53,41 @@ export interface PinkBriefContent {
   deliverables: Deliverable[];
 }
 
+export interface StrategicSection {
+  id: string;
+  title: string;
+  purpose: string;
+  summary: string; // The blue gist paragraph
+  content: string;
+}
+
+export interface Persona {
+  name: string;
+  description: string;
+  insights: string[];
+}
+
 export interface BriefData {
   researchText: string;
   extractedInsights: ExtractedInsight[];
   selectedInsight: string;
-  redThreadEssence: string;
-  strategicObjective: string;
-  redThread: RedThreadStep[];
-  targetAudience: {
-    name: string;
-    description: string;
-    insights: string[];
-  };
-  keyMessage: string;
-  tone: string;
-  brandVoice: string;
+  marketingSummarySections?: StrategicSection[];
+  marketingSummary?: string; 
+  redThreadEssence?: string;
+  redThread?: RedThreadStep[];
   pinkBrief?: PinkBriefContent;
-}
-
-export interface ModuleStatus {
-  id: ModuleId;
-  title: string;
-  description: string;
-  isCompleted: boolean;
+  strategicObjective?: string;
+  targetAudience?: Persona;
+  keyMessage?: string;
+  tone?: string;
 }
 
 export const INITIAL_BRIEF_DATA: BriefData = {
   researchText: '',
   extractedInsights: [],
   selectedInsight: '',
-  redThreadEssence: '',
   strategicObjective: '',
-  redThread: [
-    { label: 'Product', content: '', imagePrompt: 'clean product shot' },
-    { label: 'Packaging', content: '', imagePrompt: 'premium packaging' },
-    { label: 'Communication', content: '', imagePrompt: 'lifestyle marketing visual' },
-    { label: 'Instore', content: '', imagePrompt: 'retail shelf display' },
-    { label: 'Value Equation', content: '', imagePrompt: 'value offer graphic' }
-  ],
-  targetAudience: {
-    name: '',
-    description: '',
-    insights: [],
-  },
+  targetAudience: { name: '', description: '', insights: [] },
   keyMessage: '',
   tone: '',
-  brandVoice: '',
 };

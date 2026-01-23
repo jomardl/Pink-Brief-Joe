@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Loader2, ChevronRight, UserCircle2 } from 'lucide-react';
 import { generatePersona } from '../geminiService';
-import { BriefData } from '../types';
+import { BriefData, Persona } from '../types';
 
 interface Props {
   onNext: (data: { targetAudience: BriefData['targetAudience'] }) => void;
@@ -12,7 +12,8 @@ interface Props {
 }
 
 const PersonaModule: React.FC<Props> = ({ onNext, research, selectedInsight, currentData }) => {
-  const [persona, setPersona] = useState(currentData);
+  // Fixed: Ensure persona state is correctly typed and initialized from currentData
+  const [persona, setPersona] = useState<Persona>(currentData || { name: '', description: '', insights: [] });
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
@@ -20,7 +21,6 @@ const PersonaModule: React.FC<Props> = ({ onNext, research, selectedInsight, cur
       if (!research || persona.name) return;
       setIsLoading(true);
       try {
-        // Fix: Pass selectedInsight as the second argument as expected by generatePersona.
         const result = await generatePersona(research, selectedInsight);
         setPersona({
           name: result.name,

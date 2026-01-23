@@ -7,7 +7,8 @@ import {
   Target,
   CheckCircle,
   PlusCircle,
-  FolderOpen
+  FolderOpen,
+  BookOpen
 } from 'lucide-react';
 import { ModuleId, BriefData, INITIAL_BRIEF_DATA } from './types';
 import ResearchModule from './components/ResearchModule';
@@ -38,9 +39,9 @@ const App: React.FC = () => {
     },
     { 
       id: 3, 
-      title: 'Strategy', 
-      icon: Target, 
-      description: 'Define persona, creative hook, and red thread execution' 
+      title: 'Deep Dive', 
+      icon: BookOpen, 
+      description: 'Internal narrative justifying the strategic "Right to Win"' 
     },
     { 
       id: 4, 
@@ -99,7 +100,7 @@ const App: React.FC = () => {
           layoutId="brandVersion"
           className={`${isLanding ? 'text-sm' : 'text-[8px]'} font-black text-slate-400 uppercase tracking-[0.4em] mt-2`}
         >
-          Strategic Engine v6.0
+          Strategic Engine v9.0
         </motion.p>
       </div>
     </motion.div>
@@ -284,7 +285,7 @@ const App: React.FC = () => {
         <div className="flex items-center gap-3">
           <span className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
           <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.4em] font-sans">
-            P&G Strategic AI Engine v6.0 • Research Mode
+            P&G Strategic AI Engine v9.0 • Strategy Mode
           </p>
         </div>
       </footer>

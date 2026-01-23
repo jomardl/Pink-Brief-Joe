@@ -19,10 +19,11 @@ const CreativeModule: React.FC<Props> = ({ onNext, briefData }) => {
     const fetchDirections = async () => {
       setIsLoading(true);
       try {
+        // Fixed: Use optional chaining to safely access redThread and targetAudience properties
         const results = await suggestCreativeDirections({
-          objective: briefData.redThread.find(s => s.label === 'Strategic Objective')?.content,
-          proposition: briefData.redThread.find(s => s.label === 'Core Proposition')?.content,
-          persona: briefData.targetAudience.name,
+          objective: briefData.redThread?.find(s => s.label === 'Strategic Objective')?.content,
+          proposition: briefData.redThread?.find(s => s.label === 'Core Proposition')?.content,
+          persona: briefData.targetAudience?.name,
           insight: briefData.selectedInsight
         });
         setSuggestions(results);

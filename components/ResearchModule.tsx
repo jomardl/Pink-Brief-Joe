@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
-import { Upload, FileText, ChevronRight, X, Loader2, Sparkles } from 'lucide-react';
-import { motion } from 'framer-motion';
+import { Upload, FileText, ChevronRight, X, Loader2, Sparkles, AlertCircle } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { extractRankedInsights } from '../geminiService';
 import { BriefData } from '../types';
 
@@ -15,11 +15,13 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) 
   const [text, setText] = useState(currentData);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setError(null);
     setFileName(file.name);
     setIsProcessing(true);
     onProcessing(true);
@@ -40,12 +42,16 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) 
       };
       reader.readAsText(file);
     } else {
+      // Logic for PDFs/Docs: In a real env we would use an OCR or PDF parser service.
+      // Here we provide a detailed hint to the user.
       setTimeout(() => {
         const simulatedText = `Extracted Research Data from ${file.name}:
         Consumers often express frustration with current products feeling bulky.
         Many mentioned a desire for "weightless protection".
         Verbatim: "I want to forget I'm even wearing it."
-        Research identifies a significant gap in high-performance slim options.`;
+        Research identifies a significant gap in high-performance slim options.
+        Note: Deep PDF parsing is simulated in this architect version. 
+        For best results, upload raw text or RTF exports of your research.`;
         setText(simulatedText);
         setIsProcessing(false);
         onProcessing(false);
@@ -57,14 +63,22 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) 
     if (!text.trim()) return;
     setIsProcessing(true);
     onProcessing(true);
+    setError(null);
     try {
       const results = await extractRankedInsights(text);
+      if (!results.insights || results.insights.length === 0) {
+        setError("The AI Auditor could not find clear human truths in this research. Please provide more descriptive verbatims or longer context.");
+        setIsProcessing(false);
+        onProcessing(false);
+        return;
+      }
       onNext({ 
         researchText: text, 
         extractedInsights: results.insights.sort((a: any, b: any) => a.rank - b.rank) 
       });
     } catch (err) {
       console.error(err);
+      setError("Strategic analysis failed. Ensure your API key is valid and the research text is readable.");
     } finally {
       setIsProcessing(false);
       onProcessing(false);
@@ -102,6 +116,20 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) 
           </div>
         </div>
 
+        <AnimatePresence>
+          {error && (
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="flex items-start gap-4 p-6 bg-rose-50 border border-rose-100 rounded-3xl"
+            >
+              <AlertCircle className="text-rose-500 shrink-0 mt-1" size={20} />
+              <p className="text-sm font-bold text-rose-700 leading-relaxed">{error}</p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {fileName && (
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <div className="flex items-center justify-between p-6 bg-white border border-slate-100 rounded-3xl shadow-xl shadow-slate-100/50">
@@ -114,7 +142,7 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) 
               </div>
               {!isProcessing && (
                 <button 
-                  onClick={() => {setFileName(null); setText('');}} 
+                  onClick={() => {setFileName(null); setText(''); setError(null);}} 
                   className="p-3 hover:bg-rose-50 rounded-full text-slate-300 hover:text-rose-500 transition-all"
                 >
                   <X size={20} />

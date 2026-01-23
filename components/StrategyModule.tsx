@@ -1,9 +1,12 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Users, Zap, Loader2, ChevronRight, Sparkles, UserCircle2, Check, Target, RefreshCcw, AlertCircle } from 'lucide-react';
-import { generatePersona, suggestCreativeDirections, analyzeResearch, generateRedThread } from '../geminiService';
-import { BriefData, RedThreadStep } from '../types';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+   BookOpen, ChevronRight, Printer, Download, Sparkles, 
+  ChevronDown, Edit3, Check, Save, Upload, AlertCircle 
+} from 'lucide-react';
+import { generateMarketingSummary, generateRedThread } from '../geminiService';
+import { BriefData, RedThreadStep, StrategicSection } from '../types';
 
 interface Props {
   onNext: (data: Partial<BriefData>) => void;
@@ -12,28 +15,26 @@ interface Props {
 }
 
 const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) => {
-  const [persona, setPersona] = useState(briefData.targetAudience);
-  const [suggestions, setSuggestions] = useState<any[]>([]);
-  const [selectedHookIdx, setSelectedHookIdx] = useState<number | null>(null);
+  const [sections, setSections] = useState<StrategicSection[]>(briefData.marketingSummarySections || []);
+  const [redThread, setRedThread] = useState<RedThreadStep[]>(briefData.redThread || []);
+  const [essence, setEssence] = useState("Red Thread");
+  const [unlock, setUnlock] = useState(briefData.redThreadEssence || '');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [customTone, setCustomTone] = useState(briefData.tone);
-  const [localObjective, setLocalObjective] = useState(briefData.strategicObjective);
-  
-  const [steps, setSteps] = useState<RedThreadStep[]>(briefData.redThread);
-  const [essence, setEssence] = useState(briefData.redThreadEssence);
-  const [imageSeeds, setImageSeeds] = useState<string[]>(new Array(5).fill('pg-seed'));
+  const [expandedSection, setExpandedSection] = useState<string | null>(null);
+  const [editingSection, setEditingSection] = useState<string | null>(null);
 
-  // Use a ref to prevent double-firing of initialization logic
+  // Editable Labels State
+  const [productName, setProductName] = useState("PRODUCT NAME");
+  const [productPromise, setProductPromise] = useState("PRODUCT PROMISE");
+  const [offerText, setOfferText] = useState("OFFER");
+
   const hasInitialized = useRef(false);
 
   useEffect(() => {
     const fetchData = async () => {
-      // Prevent re-initialization if already loaded or currently loading
       if (hasInitialized.current || isLoading) return;
-      
-      // Secondary check: if we already have data from a previous session
-      if (persona.name && suggestions.length > 0 && steps.some(s => s.content)) {
+      if (sections.length > 0 && redThread.length > 0) {
         hasInitialized.current = true;
         return;
       }
@@ -43,323 +44,370 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
       setError(null);
 
       try {
-        let obj = localObjective;
-        if (!obj) {
-          const analysis = await analyzeResearch(briefData.researchText, briefData.selectedInsight);
-          obj = analysis.summary;
-          setLocalObjective(obj);
-        }
-
-        const [personaRes, directionsRes, threadRes] = await Promise.all([
-          generatePersona(briefData.researchText, briefData.selectedInsight),
-          suggestCreativeDirections({
-            insight: briefData.selectedInsight,
-            objective: obj
-          }),
+        const [summaryRes, threadRes] = await Promise.all([
+          generateMarketingSummary(briefData.researchText, briefData.selectedInsight),
           generateRedThread(briefData.researchText, briefData.selectedInsight)
         ]);
 
-        if (personaRes) {
-          setPersona({
-            name: personaRes.name,
-            description: `${personaRes.demographics}\n\n${personaRes.psychographics}`,
-            insights: [personaRes.keyNeed]
-          });
+        setSections(summaryRes || []);
+        // We now need exactly 5 steps
+        const baseSteps = (threadRes?.steps || []).slice(0, 5);
+        while(baseSteps.length < 5) {
+          baseSteps.push({ label: 'Strategy', content: 'Logical Step', imagePrompt: 'P&G Strategy' });
         }
-        if (directionsRes) {
-          setSuggestions(directionsRes);
-        }
-        if (threadRes) {
-          setSteps(threadRes.steps);
-          setEssence(threadRes.redThreadEssence);
-        }
-        
+        setRedThread(baseSteps);
+        setUnlock(threadRes?.redThreadUnlock || "Resolving the tension");
+        setEssence("Red Thread");
         hasInitialized.current = true;
+        if (summaryRes?.length > 0) setExpandedSection(summaryRes[0].id);
       } catch (err: any) {
-        console.error("Strategy initialization error:", err);
-        setError("The strategic engine encountered an error. Please try again.");
+        console.error("Strategy error:", err);
+        setError("Strategic synthesis failed. Check your API connection.");
       } finally {
         setIsLoading(false);
         onProcessing(false);
       }
     };
-    
-    fetchData();
-  }, [briefData.researchText, briefData.selectedInsight]); // More specific dependencies
 
-  const changeImage = (idx: number) => {
-    const nextSeeds = [...imageSeeds];
-    nextSeeds[idx] = Math.random().toString(36).substring(7);
-    setImageSeeds(nextSeeds);
+    fetchData();
+  }, [briefData.researchText, briefData.selectedInsight]);
+
+  const updateSectionContent = (id: string, field: 'content' | 'summary', val: string) => {
+    setSections(prev => prev.map(s => s.id === id ? { ...s, [field]: val } : s));
+  };
+
+  const handleImageUpload = (idx: number, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const nextThread = [...redThread];
+        nextThread[idx] = { ...nextThread[idx], userImage: reader.result as string };
+        setRedThread(nextThread);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleFinish = () => {
     onNext({
-      targetAudience: persona,
-      keyMessage: selectedHookIdx !== null ? suggestions[selectedHookIdx].message : briefData.keyMessage,
-      tone: customTone,
-      strategicObjective: localObjective,
-      redThread: steps,
+      marketingSummarySections: sections,
+      redThread: redThread,
       redThreadEssence: essence
     });
   };
 
-  const findStep = (labelPart: string, indexFallback: number) => {
-    const step = steps.find(s => s.label.toLowerCase().includes(labelPart.toLowerCase()));
-    return step || steps[indexFallback];
-  };
-
-  const orderedSteps = [
-    findStep('Product', 0),
-    findStep('Instore', 3),
-    findStep('Packaging', 1),
-    findStep('Value', 4),
-    findStep('Communication', 2),
-  ];
-
-  const threadPath = "M 175 100 C 175 250, 200 300, 200 420 L 600 420 L 1000 420 C 1000 600, 400 600, 400 780 L 800 780 C 1025 780, 1025 400, 1025 100";
-
   if (error) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center p-24 text-center space-y-6">
-        <div className="p-6 bg-rose-50 text-rose-500 rounded-full animate-bounce">
-          <AlertCircle size={48} />
+      <div className="flex-1 flex flex-col items-center justify-center p-24 text-center space-y-6 h-full">
+        <div className="p-6 bg-rose-50 text-rose-500 rounded-full"><AlertCircle size={48} /></div>
+        <h3 className="text-2xl font-black text-slate-900 uppercase">Strategic Error</h3>
+        <p className="text-slate-500 max-w-md mx-auto font-medium">{error}</p>
+        <button onClick={() => window.location.reload()} className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest">Retry Synthesis</button>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center p-24 space-y-8 h-full">
+        <motion.div animate={{ scale: [1, 1.1, 1], rotate: [0, 5, -5, 0] }} transition={{ repeat: Infinity, duration: 4 }} className="p-8 bg-[#003da5] text-white rounded-[3rem] shadow-2xl">
+          <BookOpen size={64} />
+        </motion.div>
+        <div className="text-center space-y-3">
+          <p className="text-slate-400 font-black uppercase tracking-[0.5em] text-xs">Architecting Logic...</p>
+          <p className="text-xl font-bold text-slate-800 tracking-tight">Synthesizing Red Thread & Marketing Logic</p>
         </div>
-        <div className="space-y-2">
-          <h3 className="text-2xl font-black text-slate-900 uppercase">Strategy Sync Failed</h3>
-          <p className="text-slate-500 max-w-md mx-auto font-medium">{error}</p>
+        <div className="w-64 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+          <motion.div initial={{ x: "-100%" }} animate={{ x: "100%" }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }} className="w-full h-full bg-[#ed008c]" />
         </div>
-        <button 
-          onClick={() => { hasInitialized.current = false; window.location.reload(); }}
-          className="px-10 py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all"
-        >
-          Restart Strategic Engine
-        </button>
       </div>
     );
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-24 py-12 flex flex-col relative">
-      <div className="space-y-4 text-center">
-        <div className="inline-flex items-center justify-center p-4 bg-teal-50 text-teal-600 rounded-[2rem] mb-2 shadow-sm border border-teal-100">
-          <Target size={36} />
+    <div className="max-w-7xl mx-auto py-12 flex flex-col h-full relative space-y-16">
+      
+      {/* 1. Execution Architecture (Red Thread) */}
+      <section className="space-y-8">
+        <div className="flex items-center gap-6 max-w-4xl mx-auto">
+          <div className="w-16 h-[4px] bg-rose-500 rounded-full" />
+          <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Execution Architecture</h3>
+          <div className="flex-1 h-[1px] bg-slate-100" />
         </div>
-        <h2 className="text-4xl font-black text-slate-900 tracking-tight">Creative Strategy & Execution</h2>
-        <p className="text-slate-500 max-w-2xl mx-auto text-lg leading-relaxed italic">
-          "{briefData.selectedInsight}"
-        </p>
-      </div>
 
-      {isLoading ? (
-        <div className="flex-1 flex flex-col items-center justify-center p-24 space-y-4">
-          <Loader2 className="animate-spin text-[#003da5]" size={48} />
-          <p className="text-slate-400 font-black uppercase tracking-widest text-[10px]">Architecting Strategy Components...</p>
-        </div>
-      ) : (
-        <div className="space-y-32">
-          <div className="grid lg:grid-cols-12 gap-10">
-            <div className="lg:col-span-5 space-y-8">
-              <div className="bg-white border border-slate-100 rounded-[3rem] p-8 shadow-sm h-full flex flex-col">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="p-3 bg-teal-50 text-teal-600 rounded-2xl"><Users size={24} /></div>
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">The Consumer</h3>
-                </div>
-                <div className="space-y-6 flex-1">
-                  <div className="space-y-4 bg-slate-50 rounded-[2rem] p-6 border-2 border-slate-100">
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-teal-600">
-                      <UserCircle2 size={14} /> Name
-                    </div>
-                    <input 
-                      value={persona.name}
-                      onChange={(e) => setPersona({...persona, name: e.target.value})}
-                      className="bg-transparent border-none text-slate-800 text-3xl font-black p-0 focus:ring-0 outline-none w-full"
-                    />
-                  </div>
-                  <div className="space-y-4">
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-teal-600">
-                      <UserCircle2 size={14} /> Persona Narrative
-                    </div>
-                    <textarea 
-                      value={persona.description}
-                      onChange={(e) => setPersona({...persona, description: e.target.value})}
-                      className="w-full h-80 bg-slate-50/50 border-none rounded-2xl p-4 text-sm font-bold text-slate-700 leading-relaxed focus:ring-2 focus:ring-teal-100 resize-none"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            <div className="lg:col-span-7 space-y-8">
-              <div className="bg-white border border-slate-100 rounded-[3rem] p-10 shadow-sm h-full flex flex-col">
-                <div className="flex items-center gap-3 mb-8">
-                  <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl"><Zap size={24} /></div>
-                  <h3 className="text-xl font-black text-slate-800 uppercase tracking-tight">The Hook</h3>
-                </div>
-                <div className="space-y-6 flex-1">
-                  <div className="grid grid-cols-1 gap-4">
-                    {suggestions.map((s, i) => (
-                      <button
-                        key={i}
-                        onClick={() => {
-                          setSelectedHookIdx(i);
-                          setCustomTone(s.tone);
-                        }}
-                        className={`p-6 text-left rounded-[2rem] border-2 transition-all flex items-center gap-6 relative overflow-hidden ${
-                          selectedHookIdx === i 
-                            ? 'border-amber-500 bg-amber-50 shadow-xl shadow-amber-100/50' 
-                            : 'border-slate-50 bg-slate-50/30 hover:border-amber-100'
-                        }`}
-                      >
-                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 ${
-                          selectedHookIdx === i ? 'bg-amber-500 text-white' : 'bg-white text-slate-300'
-                        }`}>
-                          {selectedHookIdx === i ? <Check size={24} strokeWidth={3} /> : <Sparkles size={20} />}
-                        </div>
-                        <div className="flex-1">
-                          <h4 className="font-black text-slate-800 tracking-tight">{s.directionName}</h4>
-                          <p className="text-xs text-slate-500 italic mt-1 leading-snug">"{s.message}"</p>
-                        </div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="space-y-16">
-            <div className="flex items-center gap-6 max-w-4xl mx-auto">
-              <div className="w-16 h-[4px] bg-rose-500 rounded-full" />
-              <h3 className="text-3xl font-black text-slate-900 uppercase tracking-tighter">Execution Architecture</h3>
-              <div className="flex-1 h-[1px] bg-slate-100" />
-            </div>
-
-            <div className="relative min-h-[1000px] overflow-visible">
-               <div className="flex items-stretch gap-0 mb-32 max-w-6xl mx-auto relative z-30">
-                <motion.div 
-                  initial={{ x: -20, opacity: 0 }}
-                  whileInView={{ x: 0, opacity: 1 }}
-                  className="bg-rose-600 text-white px-12 py-10 rounded-l-[4rem] shadow-2xl shadow-rose-200/50 flex flex-col justify-center min-w-[350px] border-r-2 border-rose-500/50"
-                >
-                  <span className="text-xs font-black uppercase tracking-[0.3em] opacity-80 mb-2">STRATEGIC ESSENCE</span>
-                  <span className="text-3xl font-black italic tracking-tighter leading-tight uppercase">
-                    {essence || 'SYNERGY'}
-                  </span>
-                </motion.div>
-
-                <motion.div 
-                  initial={{ x: 20, opacity: 0 }}
-                  whileInView={{ x: 0, opacity: 1 }}
-                  className="bg-[#003da5] text-white px-14 py-10 rounded-r-[4rem] shadow-2xl shadow-blue-200/50 flex-1 flex flex-col justify-center"
-                >
-                  <span className="text-xs font-black uppercase tracking-[0.3em] opacity-80 mb-2">JOB TO BE DONE</span>
-                  <span className="text-xl font-bold italic tracking-tight leading-snug">
-                    {localObjective || 'Establishing strategic clarity...'}
-                  </span>
-                </motion.div>
-              </div>
-
-              <svg 
-                className="absolute top-0 left-0 w-full h-full pointer-events-none z-10 overflow-visible" 
-                viewBox="0 0 1200 1000" 
-                preserveAspectRatio="xMidYMid meet"
-              >
-                <defs>
-                  <filter id="threadGlow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feGaussianBlur stdDeviation="8" result="blur" />
-                    <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                  </filter>
-                </defs>
-                <motion.path
-                  d={threadPath}
-                  fill="transparent"
-                  stroke="#e11d48"
-                  strokeWidth="10"
-                  strokeLinecap="round"
-                  initial={{ pathLength: 0 }}
-                  whileInView={{ pathLength: 1 }}
-                  transition={{ duration: 3, ease: "easeInOut" }}
-                  filter="url(#threadGlow)"
-                  className="drop-shadow-[0_0_20px_rgba(225,29,72,0.9)]"
-                />
-              </svg>
-
-              <div className="relative z-20 max-w-6xl mx-auto space-y-24">
-                <div className="grid grid-cols-3 gap-16">
-                  <StrategyCard step={orderedSteps[0]} idx={0} seed={imageSeeds[0]} onRegenerate={() => changeImage(0)} />
-                  <StrategyCard step={orderedSteps[1]} idx={1} seed={imageSeeds[1]} onRegenerate={() => changeImage(1)} />
-                  <StrategyCard step={orderedSteps[2]} idx={2} seed={imageSeeds[2]} onRegenerate={() => changeImage(2)} />
-                </div>
-                <div className="flex justify-center gap-16 px-[12%]">
-                  <div className="w-[45%]">
-                    <StrategyCard step={orderedSteps[3]} idx={3} seed={imageSeeds[3]} onRegenerate={() => changeImage(3)} />
-                  </div>
-                  <div className="w-[45%]">
-                    <StrategyCard step={orderedSteps[4]} idx={4} seed={imageSeeds[4]} onRegenerate={() => changeImage(4)} />
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-12 flex justify-center pb-24 border-t border-slate-100">
-            <button 
-              onClick={handleFinish}
-              className="px-24 py-8 bg-[#003da5] text-white rounded-[3rem] font-black text-sm uppercase tracking-[0.4em] flex items-center gap-4 hover:bg-blue-800 shadow-[0_40px_80px_rgba(0,61,165,0.3)] hover:scale-105 active:scale-95 transition-all"
+        <div className="relative min-h-[600px] overflow-visible">
+          {/* ESSENCE & UNLOCK HEADER */}
+          <div className="flex items-stretch gap-0 mb-6 max-w-4xl mx-auto relative z-30">
+            <motion.div 
+              initial={{ x: -20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              className="bg-rose-600 text-white px-8 py-6 rounded-l-[3rem] shadow-2xl shadow-rose-200/50 flex flex-col justify-center min-w-[240px] border-r-2 border-rose-500/50"
             >
-              Architect Pink Brief <ChevronRight size={28} />
-            </button>
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-80 mb-1">STRATEGIC ESSENCE</span>
+              <span className="text-3xl font-black tracking-tighter uppercase leading-none">{essence}</span>
+            </motion.div>
+
+            <motion.div 
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              className="bg-[#003da5] text-white px-10 py-6 rounded-r-[3rem] shadow-2xl shadow-blue-200/50 flex-1 flex flex-col justify-center"
+            >
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] opacity-80 mb-1">Job to be done</span>
+              <span className="text-xl font-black italic tracking-tight leading-snug uppercase">
+                {unlock || "Resolving the consumer tension"}
+              </span>
+            </motion.div>
+          </div>
+
+          {/* SVG ANIMATED THREAD - Now starts from header and snakes through 5 boxes */}
+          <svg className="absolute top-0 left-0 w-full h-full pointer-events-none z-10 overflow-visible" viewBox="0 0 1200 800">
+            <motion.path
+              d="M 220 30 C 220 90, 290 90, 290 90 L 590 90 C 590 180, 440 180, 440 270 C 440 360, 290 360, 290 450 L 590 450"
+              fill="transparent" stroke="#ff0000" strokeWidth="6" strokeLinecap="round" strokeDasharray="20,10"
+              initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ duration: 4, ease: "easeInOut" }}
+            />
+          </svg>
+
+          {/* COMPACT RED THREAD LAYOUT */}
+          <div className="relative z-20 max-w-3xl mx-auto h-[550px]">
+            {/* SQUARES - 180px, Tight Positioning */}
+            <Frame index={0} pos="top-[0px] left-[150px]" size="180px" userImage={redThread[0]?.userImage} onUpload={(e) => handleImageUpload(0, e)} />
+            <Frame index={1} pos="top-[0px] left-[450px]" size="180px" userImage={redThread[1]?.userImage} onUpload={(e) => handleImageUpload(1, e)} />
+            <Frame index={2} pos="top-[180px] left-[300px]" size="180px" userImage={redThread[2]?.userImage} onUpload={(e) => handleImageUpload(2, e)} />
+            <Frame index={3} pos="top-[360px] left-[150px]" size="180px" userImage={redThread[3]?.userImage} onUpload={(e) => handleImageUpload(3, e)} />
+            <Frame index={4} pos="top-[360px] left-[450px]" size="180px" userImage={redThread[4]?.userImage} onUpload={(e) => handleImageUpload(4, e)} />
+
+            {/* EDITABLE TEXT WINDOWS (Green Bars) - Positioned centered in gaps */}
+            
+            {/* 1. PRODUCT NAME (Centered between Top Two) */}
+            <EditableBar 
+              pos="top-[75px] left-[300px]" 
+              value={productName} 
+              onChange={setProductName} 
+            />
+
+            {/* 2. OFFER (On Middle Square) */}
+            <EditableBar 
+              pos="top-[255px] left-[300px]" 
+              value={offerText} 
+              onChange={setOfferText} 
+            />
+
+            {/* 3. PRODUCT PROMISE (Centered between Bottom Two) */}
+            <EditableBar 
+              pos="top-[435px] left-[300px]" 
+              value={productPromise} 
+              onChange={setProductPromise} 
+            />
           </div>
         </div>
-      )}
+      </section>
+
+      {/* 2. Deep Dive Sections */}
+      <section className="space-y-12 pt-16 border-t border-slate-100">
+        <div className="space-y-4 text-center">
+          <div className="inline-flex items-center justify-center p-4 bg-indigo-50 text-indigo-600 rounded-[2rem] mb-2 shadow-sm border border-indigo-100">
+            <BookOpen size={36} />
+          </div>
+          <h2 className="text-4xl font-black text-slate-900 tracking-tight uppercase">Strategic Interrogation</h2>
+          <p className="text-slate-500 max-w-2xl mx-auto text-lg font-medium leading-relaxed italic">
+            Expanding the logical narrative beneath the Red Thread.
+          </p>
+        </div>
+
+        <div className="space-y-6">
+          {(sections || []).map((section, idx) => {
+            const isExpanded = expandedSection === section.id;
+            const isEditing = editingSection === section.id;
+
+            return (
+              <motion.div 
+                key={section.id}
+                layout
+                className={`bg-white rounded-[2.5rem] border-2 transition-all duration-500 ${isExpanded ? 'border-[#003da5] shadow-2xl shadow-blue-100' : 'border-slate-100 hover:border-blue-100 shadow-sm hover:shadow-md'}`}
+              >
+                <div 
+                  onClick={() => !isEditing && setExpandedSection(isExpanded ? null : section.id)}
+                  className="p-8 cursor-pointer flex items-center justify-between group"
+                >
+                  <div className="flex items-center gap-6">
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center font-black text-xl transition-colors ${isExpanded ? 'bg-[#003da5] text-white shadow-lg' : 'bg-slate-50 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600'}`}>
+                      {idx + 1}
+                    </div>
+                    <div>
+                      <h3 className={`text-xl font-black uppercase tracking-tight ${isExpanded ? 'text-[#003da5]' : 'text-slate-800'}`}>
+                        {section.title}
+                      </h3>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
+                        {section.purpose}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.button
+                          initial={{ opacity: 0, x: 20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          exit={{ opacity: 0, x: 20 }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingSection(isEditing ? null : section.id);
+                          }}
+                          className={`p-3 rounded-xl transition-all ${isEditing ? 'bg-green-500 text-white shadow-lg' : 'bg-slate-50 text-slate-400 hover:bg-blue-50 hover:text-blue-600'}`}
+                        >
+                          {isEditing ? <Check size={20} /> : <Edit3 size={20} />}
+                        </motion.button>
+                      )}
+                    </AnimatePresence>
+                    <motion.div animate={{ rotate: isExpanded ? 180 : 0 }} className="text-slate-300">
+                      <ChevronDown size={24} />
+                    </motion.div>
+                  </div>
+                </div>
+
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div 
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="px-10 pb-10 pt-2 border-t border-slate-50">
+                        {/* BLUE GIST PARAGRAPH */}
+                        <div className="mb-8 p-8 bg-blue-50 rounded-3xl border border-blue-100">
+                          {isEditing ? (
+                            <textarea 
+                              value={section.summary}
+                              onChange={(e) => updateSectionContent(section.id, 'summary', e.target.value)}
+                              placeholder="Summary gist..."
+                              className="w-full p-4 bg-white rounded-xl border-2 border-blue-200 outline-none font-bold text-blue-800"
+                            />
+                          ) : (
+                            <p className="text-xl font-black text-[#003da5] leading-relaxed">
+                              {section.summary}
+                            </p>
+                          )}
+                        </div>
+
+                        {/* MAIN NARRATIVE CONTENT */}
+                        {isEditing ? (
+                          <textarea 
+                            value={section.content}
+                            onChange={(e) => updateSectionContent(section.id, 'content', e.target.value)}
+                            className="w-full min-h-[400px] p-8 bg-slate-50 rounded-3xl border-2 border-blue-100 focus:border-[#003da5] outline-none text-lg leading-relaxed text-slate-800 font-medium"
+                            style={{ fontFamily: 'Georgia, serif' }}
+                          />
+                        ) : (
+                          <div className="p-8 relative">
+                            <div className="absolute top-6 right-8 opacity-5 pointer-events-none">
+                              <Sparkles size={100} />
+                            </div>
+                            <div 
+                              className="prose prose-slate prose-lg max-w-none text-slate-800 leading-[2] text-xl whitespace-pre-wrap"
+                              style={{ fontFamily: 'Georgia, serif' }}
+                            >
+                              {section.content}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {isEditing && (
+                          <div className="mt-6 flex justify-end">
+                            <button 
+                              onClick={() => setEditingSection(null)}
+                              className="flex items-center gap-2 px-8 py-3 bg-[#003da5] text-white rounded-xl font-black text-xs uppercase tracking-widest shadow-xl shadow-blue-200"
+                            >
+                              <Save size={16} /> Save Changes
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </motion.div>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* FOOTER ACTIONS */}
+      <div className="flex justify-between items-center py-12 border-t border-slate-100">
+        <div className="flex gap-4">
+          <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">
+            <Printer size={16} /> Print Strategic Logic
+          </button>
+          <button className="flex items-center gap-2 px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-50 transition-all">
+            <Download size={16} /> Export Strategy
+          </button>
+        </div>
+
+        <button 
+          onClick={handleFinish}
+          className="px-24 py-8 bg-[#003da5] text-white rounded-[3rem] font-black text-sm uppercase tracking-[0.4em] flex items-center gap-4 hover:bg-blue-800 shadow-[0_40px_80px_rgba(0,61,165,0.3)] hover:scale-105 active:scale-95 transition-all"
+        >
+          Confirm Strategy & Proceed <ChevronRight size={28} />
+        </button>
+      </div>
     </div>
   );
 };
 
-const StrategyCard: React.FC<{ 
-  step?: RedThreadStep; 
-  idx: number; 
-  seed: string; 
-  onRegenerate: () => void; 
-}> = ({ step, idx, seed, onRegenerate }) => {
-  if (!step) return <div className="aspect-square w-full" />;
-  
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9, y: 30 }}
-      whileInView={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ delay: 0.1 * idx, type: "spring", stiffness: 70 }}
-      className="group relative flex flex-col items-center"
-    >
-      <div className="relative w-full aspect-square bg-white rounded-[4rem] border-[8px] border-white shadow-[0_40px_80px_rgba(0,0,0,0.12)] overflow-hidden transition-all duration-700 group-hover:shadow-[0_50px_100px_rgba(0,61,165,0.25)] group-hover:scale-[1.03]">
-        <img 
-          src={`https://picsum.photos/seed/${seed}/800/800`} 
-          alt={step.label}
-          className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-110"
-        />
-        
-        <div className="absolute inset-0 bg-gradient-to-tr from-black/40 via-transparent to-transparent opacity-60" />
-
-        <div className="absolute top-10 left-1/2 -translate-x-1/2 bg-white/95 backdrop-blur-2xl px-10 py-4 rounded-[2rem] border border-slate-100 shadow-xl z-20">
-           <span className="text-sm font-black text-[#003da5] uppercase tracking-[0.3em]">{step.label}</span>
-        </div>
-
-        <div className="absolute inset-0 bg-[#003da5]/80 opacity-0 group-hover:opacity-100 transition-all duration-500 flex items-center justify-center backdrop-blur-md">
-          <button 
-            onClick={(e) => { e.stopPropagation(); onRegenerate(); }}
-            className="bg-white text-[#003da5] p-8 rounded-[2rem] shadow-2xl hover:scale-110 transition-transform flex items-center gap-4 font-black text-xs uppercase tracking-[0.2em]"
-          >
-            <RefreshCcw size={20} />
-            Re-visualize
-          </button>
-        </div>
-
-        <div className="absolute left-[-12px] top-1/2 -translate-y-1/2 w-8 h-8 bg-rose-500 rounded-full border-[6px] border-white z-30 shadow-[0_0_20px_rgba(225,29,72,0.8)]" />
-        <div className="absolute right-[-12px] top-1/2 -translate-y-1/2 w-8 h-8 bg-rose-500 rounded-full border-[6px] border-white z-30 shadow-[0_0_20px_rgba(225,29,72,0.8)]" />
+// COMPONENT FOR EDITABLE GREEN BARS
+const EditableBar: React.FC<{ pos: string; value: string; onChange: (val: string) => void }> = ({ pos, value, onChange }) => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.8 }}
+    animate={{ opacity: 1, scale: 1 }}
+    className={`absolute ${pos} z-30 w-[180px]`}
+  >
+    <div className="bg-green-500/90 backdrop-blur rounded shadow-2xl border border-white/40 overflow-hidden group">
+      <input 
+        value={value}
+        onChange={(e) => onChange(e.target.value.toUpperCase())}
+        className="w-full bg-transparent border-none text-black font-black text-[10px] uppercase tracking-widest text-center py-3 focus:ring-0 focus:outline-none placeholder-black/30"
+      />
+      <div className="absolute top-0 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        <Edit3 size={10} className="text-black/50" />
       </div>
-    </motion.div>
-  );
-};
+    </div>
+  </motion.div>
+);
+
+// FRAME COMPONENT FOR RED THREAD GRID
+const Frame: React.FC<{ 
+  index: number; 
+  pos: string; 
+  size: string;
+  userImage?: string; 
+  onUpload: (e: React.ChangeEvent<HTMLInputElement>) => void 
+}> = ({ index, pos, size, userImage, onUpload }) => (
+  <motion.div
+    initial={{ opacity: 0, scale: 0.9 }}
+    animate={{ opacity: 1, scale: 1 }}
+    transition={{ delay: 0.15 * index }}
+    className={`absolute ${pos} group`}
+    style={{ width: size, height: size }}
+  >
+    <div className="relative w-full h-full bg-red-600 rounded-xl overflow-hidden shadow-2xl border-4 border-white transition-all duration-500 group-hover:scale-105 group-hover:shadow-[0_40px_80px_rgba(255,0,0,0.25)]">
+      {userImage ? (
+        <img src={userImage} alt={`Step ${index + 1}`} className="w-full h-full object-cover" />
+      ) : (
+        <div className="w-full h-full flex flex-col items-center justify-center p-4 text-center text-white/40">
+           <Upload size={24} strokeWidth={3} />
+           <p className="text-[9px] font-black uppercase tracking-widest mt-2">Upload Context</p>
+        </div>
+      )}
+      <input 
+        type="file" 
+        accept="image/*" 
+        onChange={onUpload} 
+        className="absolute inset-0 opacity-0 cursor-pointer z-20" 
+      />
+    </div>
+  </motion.div>
+);
 
 export default StrategyModule;

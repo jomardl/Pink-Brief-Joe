@@ -53,20 +53,20 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
 
   const updateDeliverable = (idx: number, field: keyof Deliverable, value: any) => {
     if (!content) return;
-    const next = [...content.deliverables];
+    const next = [...(content.deliverables || [])];
     next[idx] = { ...next[idx], [field]: value };
     setContent({ ...content, deliverables: next });
   };
 
   const addDeliverableRow = () => {
     if (!content) return;
-    const next = [...content.deliverables, { touchpoint: 'New Touchpoint', messages: ['New Message'] }];
+    const next = [...(content.deliverables || []), { touchpoint: 'New Touchpoint', messages: ['New Message'] }];
     setContent({ ...content, deliverables: next });
   };
 
   const removeDeliverableRow = (idx: number) => {
     if (!content) return;
-    const next = content.deliverables.filter((_, i) => i !== idx);
+    const next = (content.deliverables || []).filter((_, i) => i !== idx);
     setContent({ ...content, deliverables: next });
   };
 
@@ -279,7 +279,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
               </tr>
             </thead>
             <tbody>
-              {content.deliverables.map((d, i) => (
+              {(content.deliverables || []).map((d, i) => (
                 <tr key={i}>
                   <td className="border-2 border-slate-900 p-4">
                     <EditableWrapper>
@@ -293,7 +293,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
                   <td className="border-2 border-slate-900 p-4">
                     <EditableWrapper>
                       <textarea 
-                        value={d.messages.join('\n')}
+                        value={(d.messages || []).join('\n')}
                         onChange={(e) => updateDeliverable(i, 'messages', e.target.value.split('\n'))}
                         className="w-full bg-transparent border-none p-0 focus:ring-0 text-sm leading-relaxed h-20 resize-none whitespace-normal break-words"
                       />
@@ -380,8 +380,6 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
           <button className="flex items-center gap-3 px-8 py-4 bg-white border border-slate-200 text-slate-700 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-slate-50 transition-all">
             <Printer size={18} /> Print to PDF
           </button>
-        </div>
-        <div className="flex gap-4">
         </div>
       </div>
     </div>
