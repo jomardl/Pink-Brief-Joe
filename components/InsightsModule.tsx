@@ -18,7 +18,8 @@ import {
   User
 } from 'lucide-react';
 import { ExtractedInsight, BriefData, TensionType } from '../types';
-import { testBespokeInsight } from '../geminiService';
+import { testBespokeInsight } from '../aiService';
+import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
 
 interface Props {
   onNext: (data: Partial<BriefData>) => void;
@@ -46,6 +47,7 @@ const InsightsModule: React.FC<Props> = ({
   categoryContext,
   onProcessing
 }) => {
+  const { selectInsight } = useBriefFlowStore();
   const [localInsights, setLocalInsights] = useState<ExtractedInsight[]>(extractedInsights);
   const [expandedIndices, setExpandedIndices] = useState<Set<number | string>>(new Set());
 
@@ -143,6 +145,8 @@ const InsightsModule: React.FC<Props> = ({
   const handleContinue = () => {
     const insight = getSelectedInsight();
     if (insight) {
+      // Save selected insight ID to store (auto-saves to DB)
+      selectInsight(insight.id);
       onNext({ selectedInsight: insight });
     }
   };

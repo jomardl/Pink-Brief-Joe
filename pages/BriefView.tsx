@@ -1,18 +1,56 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Loader2, AlertCircle, Link2, Check, FileText, Lightbulb, Target, FileOutput } from 'lucide-react';
 import { briefService } from '../lib/services/briefService';
 import { isSupabaseConfigured } from '../lib/supabase/client';
+import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
 import type { Brief } from '../lib/supabase/types';
 import { BriefData, INITIAL_BRIEF_DATA, PinkBriefContent, ExtractedInsight } from '../types';
 import SummaryModule from '../components/SummaryModule';
+import ResearchViewer from '../components/viewers/ResearchViewer';
+import InsightsViewer from '../components/viewers/InsightsViewer';
+import StrategyViewer from '../components/viewers/StrategyViewer';
+
+type TabId = 'research' | 'insights' | 'strategy' | 'brief';
+
+const tabs: { id: TabId; label: string; icon: React.ElementType }[] = [
+  { id: 'research', label: 'Research', icon: FileText },
+  { id: 'insights', label: 'Insights', icon: Lightbulb },
+  { id: 'strategy', label: 'Strategy', icon: Target },
+  { id: 'brief', label: 'Brief', icon: FileOutput },
+];
 
 const BriefView: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
+  const { loadBrief: loadBriefToStore } = useBriefFlowStore();
   const [brief, setBrief] = useState<Brief | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [isLoadingForEdit, setIsLoadingForEdit] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabId>('brief');
+
+  const copyLink = async () => {
+    const url = `${window.location.origin}/brief/${id}`;
+    await navigator.clipboard.writeText(url);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
+  const handleContinueEditing = async () => {
+    if (!id) return;
+    setIsLoadingForEdit(true);
+    try {
+      await loadBriefToStore(id);
+      navigate('/new');
+    } catch (err) {
+      console.error('Failed to load brief for editing:', err);
+      setError('Failed to load brief for editing');
+    } finally {
+      setIsLoadingForEdit(false);
+    }
+  };
 
   useEffect(() => {
     if (!id) {
@@ -114,30 +152,84 @@ const BriefView: React.FC = () => {
 
   const briefData = convertToBriefData(brief);
 
-  // If brief has pink_brief content, show the summary view
-  if (brief.pink_brief) {
+  // If brief has pink_brief content OR is marked complete, show the tabbed view
+  if (brief.pink_brief || brief.status === 'complete') {
     return (
       <div className="min-h-screen flex flex-col bg-[#f4f4f4]">
-        <header className="h-12 bg-[#161616] flex items-center px-4 shrink-0">
+        <header className="h-12 bg-[#161616] flex items-center justify-between px-4 shrink-0">
+          <div className="flex items-center">
+            <button
+              onClick={() => navigate('/briefs')}
+              className="text-white text-sm font-medium tracking-tight hover:text-[#a8a8a8] transition-colors flex items-center gap-2"
+            >
+              <ArrowLeft size={16} />
+              Back
+            </button>
+            <span className="mx-3 text-[#525252]">/</span>
+            <span className="text-[#c6c6c6] text-sm">{brief.title}</span>
+          </div>
           <button
-            onClick={() => navigate('/briefs')}
-            className="text-white text-sm font-medium tracking-tight hover:text-[#a8a8a8] transition-colors flex items-center gap-2"
+            onClick={copyLink}
+            className="h-8 px-3 text-white text-xs font-medium flex items-center gap-1.5 hover:bg-[#393939] transition-colors rounded"
           >
-            <ArrowLeft size={16} />
-            Back
+            {linkCopied ? <Check size={14} /> : <Link2 size={14} />}
+            {linkCopied ? 'Copied!' : 'Copy Link'}
           </button>
-          <span className="mx-3 text-[#525252]">/</span>
-          <span className="text-[#c6c6c6] text-sm">{brief.title}</span>
         </header>
 
-        <main className="flex-1 overflow-auto">
-          <div className="max-w-5xl mx-auto p-8">
-            <SummaryModule
-              briefData={briefData}
-              onReset={handleReset}
-              onProcessing={() => {}}
-            />
+        {/* Tab navigation */}
+        <div className="border-b border-[#e0e0e0] bg-white shrink-0">
+          <div className="max-w-5xl mx-auto flex">
+            {tabs.map(tab => {
+              const Icon = tab.icon;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
+                    activeTab === tab.id
+                      ? 'border-[#0f62fe] text-[#0f62fe]'
+                      : 'border-transparent text-[#525252] hover:text-[#161616]'
+                  }`}
+                >
+                  <Icon size={16} />
+                  {tab.label}
+                </button>
+              );
+            })}
           </div>
+        </div>
+
+        <main className="flex-1 overflow-auto">
+          {activeTab === 'research' && (
+            <ResearchViewer
+              sourceDocument={brief.source_documents?.[0] || null}
+              rawText={briefData.researchText}
+            />
+          )}
+          {activeTab === 'insights' && (
+            <InsightsViewer
+              insights={briefData.extractedInsights}
+              selectedInsightId={brief.selected_insight_id}
+              categoryContext={briefData.categoryContext}
+            />
+          )}
+          {activeTab === 'strategy' && (
+            <StrategyViewer
+              redThreadEssence={briefData.redThreadEssence}
+              redThreadUnlock={brief.marketing_summary?.red_thread_unlock || ''}
+              sections={briefData.marketingSummarySections}
+            />
+          )}
+          {activeTab === 'brief' && (
+            <div className="max-w-5xl mx-auto p-8">
+              <SummaryModule
+                briefData={briefData}
+                onReset={handleReset}
+                onProcessing={() => {}}
+              />
+            </div>
+          )}
         </main>
       </div>
     );
@@ -168,13 +260,11 @@ const BriefView: React.FC = () => {
 
           <div className="flex gap-4">
             <button
-              onClick={() => {
-                // TODO: Implement resume editing by loading brief state
-                navigate('/new');
-              }}
-              className="h-10 px-4 bg-[#0f62fe] text-white text-sm font-medium hover:bg-[#0353e9] transition-colors"
+              onClick={handleContinueEditing}
+              disabled={isLoadingForEdit}
+              className="h-10 px-4 bg-[#0f62fe] text-white text-sm font-medium hover:bg-[#0353e9] transition-colors disabled:opacity-50"
             >
-              Continue Editing
+              {isLoadingForEdit ? 'Loading...' : 'Continue Editing'}
             </button>
             <button
               onClick={() => navigate('/briefs')}

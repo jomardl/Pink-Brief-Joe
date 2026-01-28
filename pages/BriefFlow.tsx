@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -7,7 +7,8 @@ import {
   Layers,
   FileText,
   Package,
-  Check
+  Check,
+  Loader2
 } from 'lucide-react';
 import { ModuleId, BriefData, INITIAL_BRIEF_DATA } from '../types';
 import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
@@ -17,6 +18,8 @@ import ResearchModule from '../components/ResearchModule';
 import InsightsModule from '../components/InsightsModule';
 import StrategyModule from '../components/StrategyModule';
 import SummaryModule from '../components/SummaryModule';
+import AIProviderToggle from '../components/AIProviderToggle';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 type ExtendedModuleId = 0 | ModuleId; // 0 = product selection
 
@@ -31,16 +34,121 @@ const BriefFlow: React.FC = () => {
     userName,
     setUserName,
     createBrief,
+    loadBrief,
     isSaving,
     lastSaved,
     briefId,
+    currentStep,
+    rawDocumentText,
+    categoryContext,
+    insights,
+    selectedInsightId,
+    marketingSummary,
+    pinkBrief,
   } = useBriefFlowStore();
 
-  // Local state for the flow
-  const [currentModule, setCurrentModule] = useState<ExtendedModuleId>(0);
+  // Map store step to module ID
+  const stepToModule: Record<string, ExtendedModuleId> = {
+    'product': 0,
+    'upload': 1,
+    'insights': 2,
+    'strategy': 3,
+    'brief': 4,
+  };
+
+  // Local state for the flow - initialize from store if available
+  const initialModule = briefId ? stepToModule[currentStep] || 0 : 0;
+  const [currentModule, setCurrentModule] = useState<ExtendedModuleId>(initialModule);
   const [briefData, setBriefData] = useState<BriefData>(INITIAL_BRIEF_DATA);
   const [completedModules, setCompletedModules] = useState<ExtendedModuleId[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [storeLoaded, setStoreLoaded] = useState(false);
+
+  // Regeneration confirmation dialog state
+  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
+  const [pendingModule, setPendingModule] = useState<ExtendedModuleId | null>(null);
+  const [isLoadingBrief, setIsLoadingBrief] = useState(false);
+
+  // Auto-load brief from database if we have a briefId but no data
+  // This handles the case where user returns after a page refresh
+  // Skip if currentStep is 'upload' - that means we just created a new brief
+  useEffect(() => {
+    const shouldAutoLoad = briefId &&
+      !rawDocumentText &&
+      !isLoadingBrief &&
+      dbConfigured &&
+      currentStep !== 'upload'; // Don't auto-load for newly created briefs
+
+    if (shouldAutoLoad) {
+      setIsLoadingBrief(true);
+      loadBrief(briefId)
+        .catch(err => {
+          console.error('Failed to reload brief:', err);
+          // If loading fails, reset the store
+          useBriefFlowStore.getState().reset();
+        })
+        .finally(() => setIsLoadingBrief(false));
+    }
+  }, [briefId, rawDocumentText, dbConfigured, isLoadingBrief, loadBrief, currentStep]);
+
+  // Sync store data to local state on mount (for resuming briefs)
+  useEffect(() => {
+    // Only sync once when we have valid data from the store
+    if (storeLoaded) return;
+
+    // Wait until we have data to sync
+    if (!briefId || !rawDocumentText) return;
+
+    // There's existing data in the store - sync to local state
+    const selectedInsight = insights.find(i => i.id === selectedInsightId) || null;
+
+    setBriefData({
+      researchText: rawDocumentText,
+      extractedInsights: insights.map(i => ({
+        id: i.id,
+        insight_headline: i.insight_headline,
+        insight_text: i.insight_text,
+        verbatims: i.verbatims,
+        relevance_score: i.relevance_score,
+        tension_type: i.tension_type,
+        jtbd: i.jtbd,
+      })),
+      categoryContext: categoryContext,
+      selectedInsight: selectedInsight ? {
+        id: selectedInsight.id,
+        insight_headline: selectedInsight.insight_headline,
+        insight_text: selectedInsight.insight_text,
+        verbatims: selectedInsight.verbatims,
+        relevance_score: selectedInsight.relevance_score,
+        tension_type: selectedInsight.tension_type,
+        jtbd: selectedInsight.jtbd,
+      } : null,
+      marketingSummarySections: marketingSummary?.sections || [],
+      redThreadEssence: marketingSummary?.red_thread_essence || '',
+      pinkBrief: pinkBrief ? {
+        business_objective: pinkBrief.business_objective,
+        consumer_problem: pinkBrief.consumer_problem,
+        communication_challenge: pinkBrief.communication_challenge,
+        message_strategy: pinkBrief.message_strategy,
+        insights: pinkBrief.insights,
+        execution: pinkBrief.execution,
+      } : null,
+    });
+
+    // Set completed modules based on progress
+    const completed: ExtendedModuleId[] = [0]; // Product always done if we have a briefId
+    if (rawDocumentText) completed.push(1);
+    if (insights.length > 0) completed.push(2);
+    if (marketingSummary) completed.push(3);
+    if (pinkBrief) completed.push(4);
+    setCompletedModules(completed);
+
+    // Set current module based on step
+    setCurrentModule(stepToModule[currentStep] || 0);
+
+    // Mark as loaded only after syncing
+    setStoreLoaded(true);
+  }, [briefId, rawDocumentText, insights, selectedInsightId, marketingSummary, pinkBrief, categoryContext, currentStep, storeLoaded]);
 
   const modules = [
     { id: 0, title: 'Product', icon: Package },
@@ -89,9 +197,47 @@ const BriefFlow: React.FC = () => {
 
   const goToModule = (id: ExtendedModuleId) => {
     if (id === 0 || completedModules.includes((id - 1) as ExtendedModuleId) || completedModules.includes(id)) {
-      setCurrentModule(id);
+      // If navigating to an earlier step and Brief has been generated, warn user
+      // This applies when going to Research, Insights, or Strategy while a Brief exists
+      if (id < 4 && id < currentModule && briefData.pinkBrief) {
+        setPendingModule(id);
+        setShowRegenerateDialog(true);
+      } else {
+        setCurrentModule(id);
+      }
     }
   };
+
+  // Handle confirming regeneration (user wants to edit and regenerate)
+  const handleConfirmRegenerate = () => {
+    if (pendingModule !== null) {
+      // Clear pinkBrief since user will be making changes
+      setBriefData(prev => ({ ...prev, pinkBrief: null }));
+      // Remove Brief from completed modules
+      setCompletedModules(prev => prev.filter(m => m !== 4));
+      setCurrentModule(pendingModule);
+    }
+    setShowRegenerateDialog(false);
+    setPendingModule(null);
+  };
+
+  // Handle canceling regeneration (user wants to stay on Brief)
+  const handleCancelRegenerate = () => {
+    setShowRegenerateDialog(false);
+    setPendingModule(null);
+  };
+
+  // Show loading state while reloading brief from database
+  if (isLoadingBrief) {
+    return (
+      <div className="min-h-screen bg-[#f4f4f4] flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 size={32} className="text-[#0f62fe] animate-spin mx-auto mb-4" />
+          <p className="text-sm text-[#6f6f6f]">Loading your brief...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[#f4f4f4]">
@@ -115,16 +261,21 @@ const BriefFlow: React.FC = () => {
           )}
         </div>
 
-        {/* Save status indicator */}
-        {dbConfigured && briefId && (
-          <div className="flex items-center gap-2 text-xs text-[#6f6f6f]">
-            {isSaving ? (
-              <span className="animate-pulse">Saving...</span>
-            ) : lastSaved ? (
-              <span>Saved</span>
-            ) : null}
-          </div>
-        )}
+        <div className="flex items-center gap-4">
+          {/* AI Provider Toggle */}
+          <AIProviderToggle />
+
+          {/* Save status indicator */}
+          {dbConfigured && briefId && (
+            <div className="flex items-center gap-2 text-xs text-[#6f6f6f]">
+              {isSaving ? (
+                <span className="animate-pulse">Saving...</span>
+              ) : lastSaved ? (
+                <span>Saved</span>
+              ) : null}
+            </div>
+          )}
+        </div>
       </header>
 
       {/* Progress bar */}
@@ -215,6 +366,7 @@ const BriefFlow: React.FC = () => {
               {currentModule === 3 && (
                 <StrategyModule
                   onNext={handleNext}
+                  onBack={() => setCurrentModule(2)}
                   briefData={briefData}
                   onProcessing={setIsProcessing}
                 />
@@ -243,6 +395,18 @@ const BriefFlow: React.FC = () => {
           Step {currentModule} of 4
         </span>
       </footer>
+
+      {/* Regeneration confirmation dialog */}
+      <ConfirmDialog
+        isOpen={showRegenerateDialog}
+        title="Regenerate Brief?"
+        message="Going back to edit previous steps will require regenerating the Pink Brief. Your current brief content will be replaced when you proceed to the Brief step again."
+        confirmLabel="Edit & Regenerate"
+        cancelLabel="Stay on Brief"
+        variant="warning"
+        onConfirm={handleConfirmRegenerate}
+        onCancel={handleCancelRegenerate}
+      />
     </div>
   );
 };

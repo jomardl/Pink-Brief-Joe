@@ -9,20 +9,24 @@ import {
   AlertCircle,
   RefreshCcw,
   ArrowRight,
+  ArrowLeft,
   Loader2
 } from 'lucide-react';
-import { performStrategicSynthesis } from '../geminiService';
+import { performStrategicSynthesis } from '../aiService';
 import { BriefData, StrategicSection } from '../types';
+import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
 
 interface Props {
   onNext: (data: Partial<BriefData>) => void;
+  onBack?: () => void;
   briefData: BriefData;
   onProcessing: (val: boolean) => void;
 }
 
-const TIMEOUT_MS = 45000;
+const TIMEOUT_MS = 90000; // 90 seconds for Claude's longer synthesis
 
-const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) => {
+const StrategyModule: React.FC<Props> = ({ onNext, onBack, briefData, onProcessing }) => {
+  const { setMarketingSummary } = useBriefFlowStore();
   const [sections, setSections] = useState<StrategicSection[]>(briefData.marketingSummarySections || []);
   const [summaryMeta, setSummaryMeta] = useState({ essence: "Red Thread", unlock: "The Strategic Unlock" });
   const [isLoading, setIsLoading] = useState(false);
@@ -32,6 +36,40 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
 
   const fetchAttempted = useRef(false);
 
+  const runSynthesis = async () => {
+    setIsLoading(true);
+    onProcessing(true);
+    setError(null);
+
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Synthesis timed out. Please try again.")), TIMEOUT_MS)
+    );
+
+    try {
+      const result: any = await Promise.race([
+        performStrategicSynthesis(briefData.researchText, briefData.selectedInsight?.insight_text || ''),
+        timeoutPromise
+      ]);
+
+      if (result && result.sections) {
+        setSections(result.sections);
+        setSummaryMeta({
+          essence: result.redThreadEssence || "Red Thread",
+          unlock: result.redThreadUnlock || "The Strategic Unlock"
+        });
+        if (result.sections.length > 0) setExpandedSection(result.sections[0].id);
+      } else {
+        throw new Error("Invalid synthesis result.");
+      }
+    } catch (err: any) {
+      console.error("Strategic Module Error:", err);
+      setError(err.message || "Synthesis failed. Please try again.");
+    } finally {
+      setIsLoading(false);
+      onProcessing(false);
+    }
+  };
+
   useEffect(() => {
     const initSynthesis = async () => {
       if (fetchAttempted.current || isLoading) return;
@@ -40,38 +78,8 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
         return;
       }
 
-      setIsLoading(true);
-      onProcessing(true);
-      setError(null);
       fetchAttempted.current = true;
-
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Synthesis timed out. Please try again.")), TIMEOUT_MS)
-      );
-
-      try {
-        const result: any = await Promise.race([
-          performStrategicSynthesis(briefData.researchText, briefData.selectedInsight?.insight_text || ''),
-          timeoutPromise
-        ]);
-
-        if (result && result.sections) {
-          setSections(result.sections);
-          setSummaryMeta({
-            essence: result.redThreadEssence || "Red Thread",
-            unlock: result.redThreadUnlock || "The Strategic Unlock"
-          });
-          if (result.sections.length > 0) setExpandedSection(result.sections[0].id);
-        } else {
-          throw new Error("Invalid synthesis result.");
-        }
-      } catch (err: any) {
-        console.error("Strategic Module Error:", err);
-        setError(err.message || "Synthesis failed. Please try again.");
-      } finally {
-        setIsLoading(false);
-        onProcessing(false);
-      }
+      runSynthesis();
     };
 
     initSynthesis();
@@ -82,6 +90,17 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
   };
 
   const handleFinish = () => {
+    // Save marketing summary to store (auto-saves to DB)
+    setMarketingSummary({
+      red_thread_essence: summaryMeta.essence,
+      red_thread_unlock: summaryMeta.unlock,
+      sections: sections.map(s => ({
+        id: s.id,
+        title: s.title,
+        content: s.content,
+      })),
+    });
+
     onNext({
       marketingSummarySections: sections,
       redThreadEssence: summaryMeta.essence,
@@ -97,13 +116,32 @@ const StrategyModule: React.FC<Props> = ({ onNext, briefData, onProcessing }) =>
           <AlertCircle size={32} className="text-[#da1e28]" />
         </div>
         <h3 className="text-2xl font-light text-[#161616] mb-2">Synthesis failed</h3>
-        <p className="text-sm text-[#525252] mb-8">{error}</p>
-        <button
-          onClick={() => window.location.reload()}
-          className="h-12 px-6 bg-[#0f62fe] text-white text-sm font-medium flex items-center gap-2 mx-auto hover:bg-[#0353e9] transition-colors"
-        >
-          <RefreshCcw size={16} /> Try again
-        </button>
+        <p className="text-sm text-[#525252] mb-6">{error}</p>
+
+        <div className="flex flex-col gap-3 items-center">
+          <button
+            onClick={() => {
+              setError(null);
+              runSynthesis();
+            }}
+            className="h-12 px-6 bg-[#0f62fe] text-white text-sm font-medium flex items-center gap-2 hover:bg-[#0353e9] transition-colors"
+          >
+            <RefreshCcw size={16} /> Try Again
+          </button>
+
+          {onBack && (
+            <button
+              onClick={onBack}
+              className="h-10 px-4 text-[#525252] text-sm font-medium flex items-center gap-2 hover:bg-[#f4f4f4] transition-colors"
+            >
+              <ArrowLeft size={16} /> Back to Insights
+            </button>
+          )}
+        </div>
+
+        <p className="text-xs text-[#6f6f6f] mt-6">
+          Your research and insights are preserved. You won't lose any progress.
+        </p>
       </div>
     );
   }

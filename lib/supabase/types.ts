@@ -108,6 +108,8 @@ export interface BriefWithProduct {
   brand: string;
   market: string | null;
   category: string | null;
+  source_filename: string | null;
+  model_used: string | null;
 }
 
 // JSONB structures

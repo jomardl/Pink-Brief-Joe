@@ -2,8 +2,9 @@
 import React, { useState } from 'react';
 import { Upload, FileText, X, Loader2, ArrowRight, AlertCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { extractRankedInsights } from '../geminiService';
+import { extractRankedInsights } from '../aiService';
 import { BriefData } from '../types';
+import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
 import * as pdfjsLib from 'pdfjs-dist';
 import mammoth from 'mammoth';
 import * as XLSX from 'xlsx';
@@ -18,6 +19,7 @@ interface Props {
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
 const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) => {
+  const { setSourceDocument, setInsightsData } = useBriefFlowStore();
   const [text, setText] = useState(currentData);
   const [fileName, setFileName] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -130,9 +132,31 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) 
         onProcessing(false);
         return;
       }
+
+      // Sort by relevance_score (higher is better)
+      const sortedInsights = results.insights.sort((a, b) => b.relevance_score - a.relevance_score);
+
+      // Save source document to store (auto-saves to DB)
+      setSourceDocument(
+        {
+          filename: fileName || 'pasted_text.txt',
+          file_type: fileName?.split('.').pop() || 'txt',
+          upload_timestamp: new Date().toISOString(),
+          file_size_bytes: text.length,
+          raw_text: text,
+        },
+        text
+      );
+
+      // Save insights to store (auto-saves to DB)
+      // Insights from AI already match ExtractedInsightDB structure
+      setInsightsData(results.category_context || '', sortedInsights);
+
+      // Also pass to local state for UI
       onNext({
         researchText: text,
-        extractedInsights: results.insights.sort((a: any, b: any) => a.rank - b.rank)
+        extractedInsights: sortedInsights,
+        categoryContext: results.category_context || '',
       });
     } catch (err) {
       console.error(err);

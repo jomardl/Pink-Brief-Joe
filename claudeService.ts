@@ -1,9 +1,9 @@
 
-import { GoogleGenAI, Type } from "@google/genai";
+import Anthropic from "@anthropic-ai/sdk";
 import { ExtractedInsight, PinkBriefContent, InsightExtractionResult } from "./types";
 
 // ============================================
-// PROMPTS
+// PROMPTS (shared with geminiService)
 // ============================================
 
 const INSIGHT_EXTRACTION_INSTRUCTIONS = `
@@ -47,7 +47,7 @@ Generate 3-5 consumer insights. Each insight MUST:
 
 ## OUTPUT FORMAT
 
-Return valid JSON only.
+Return valid JSON only. No markdown, no explanation, just the JSON object.
 `;
 
 const PINK_BRIEF_GENERATION_INSTRUCTIONS = `
@@ -106,7 +106,7 @@ const STRATEGIST_INSTRUCTIONS = `
 You are a Senior Brand Strategist at P&G. Synthesize raw data into a logical narrative.
 
 TASK: Generate a Marketing Summary with 5 distinct sections and a "Red Thread" essence/unlock.
-STYLE: Professional, analytical, persuasive. Use rich paragraphs for sections.
+STYLE: Professional, analytical, persuasive. Be CONCISE.
 
 SECTIONS:
 1. Business Landscape & Competitive Reality
@@ -115,20 +115,20 @@ SECTIONS:
 4. The Brand's Right to Win
 5. Creative & Cultural Direction
 
-OUTPUT: Valid JSON only.
+LENGTH CONSTRAINTS:
+- redThreadEssence: MAX 10 words
+- redThreadUnlock: MAX 20 words
+- Each section summary: MAX 30 words
+- Each section content: MAX 150 words (1 focused paragraph)
+
+OUTPUT: Valid JSON only. No markdown, no explanation.
 `;
 
 // ============================================
 // CONFIG
 // ============================================
 
-const FLASH_MODEL = "gemini-2.0-flash";
-const PRO_MODEL = "gemini-2.0-flash";
-
-const DETERMINISTIC_CONFIG = {
-  temperature: 0.1,
-  seed: 42,
-};
+const CLAUDE_MODEL = "claude-sonnet-4-20250514";
 
 const pruneText = (text: string, limit = 6000) => {
   if (!text) return "";
@@ -179,57 +179,34 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 1): Promise<T> {
   throw lastError;
 }
 
+const getClient = () => {
+  const apiKey = import.meta.env.VITE_ANTHROPIC_API_KEY as string;
+  if (!apiKey) throw new Error("VITE_ANTHROPIC_API_KEY not set");
+  return new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+};
+
 // ============================================
-// INSIGHT EXTRACTION (NEW P&G FORMAT)
+// INSIGHT EXTRACTION
 // ============================================
 
 export const extractRankedInsights = async (text: string): Promise<InsightExtractionResult> => {
   return withRetry(async () => {
-    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY as string });
-    const response = await ai.models.generateContent({
-      model: FLASH_MODEL,
-      contents: `Extract consumer insights from this research document:\n\n${pruneText(text)}`,
-      config: {
-        ...DETERMINISTIC_CONFIG,
-        systemInstruction: INSIGHT_EXTRACTION_INSTRUCTIONS,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            insights: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.INTEGER },
-                  insight_headline: { type: Type.STRING },
-                  insight_text: { type: Type.STRING },
-                  verbatims: {
-                    type: Type.ARRAY,
-                    items: {
-                      type: Type.OBJECT,
-                      properties: {
-                        quote: { type: Type.STRING },
-                        source_location: { type: Type.STRING }
-                      },
-                      required: ["quote", "source_location"]
-                    }
-                  },
-                  relevance_score: { type: Type.INTEGER },
-                  tension_type: { type: Type.STRING },
-                  jtbd: { type: Type.STRING }
-                },
-                required: ["id", "insight_headline", "insight_text", "verbatims", "relevance_score", "tension_type", "jtbd"]
-              }
-            },
-            category_context: { type: Type.STRING }
-          },
-          required: ["insights", "category_context"]
-        }
-      }
+    const client = getClient();
+
+    const response = await client.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 4096,
+      system: INSIGHT_EXTRACTION_INSTRUCTIONS,
+      messages: [{
+        role: "user",
+        content: `Extract consumer insights from this research document:\n\n${pruneText(text)}`
+      }]
     });
 
-    const content = cleanAndParseJSON(response.text);
+    const textContent = response.content.find(c => c.type === 'text');
+    if (!textContent || textContent.type !== 'text') throw new Error("No text response");
+
+    const content = cleanAndParseJSON(textContent.text);
     if (!content || !content.insights) throw new Error("Invalid insights response");
 
     return {
@@ -245,13 +222,9 @@ export const extractRankedInsights = async (text: string): Promise<InsightExtrac
 
 export const testBespokeInsight = async (text: string, userInsight: string): Promise<ExtractedInsight> => {
   return withRetry(async () => {
-    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY as string });
-    const response = await ai.models.generateContent({
-      model: FLASH_MODEL,
-      contents: `Test this hypothesis against the research: "${userInsight}"\n\nResearch:\n${pruneText(text)}`,
-      config: {
-        ...DETERMINISTIC_CONFIG,
-        systemInstruction: `You are a P&G Consumer Insights Analyst. Evaluate if the given hypothesis is supported by the research.
+    const client = getClient();
+
+    const systemPrompt = `You are a P&G Consumer Insights Analyst. Evaluate if the given hypothesis is supported by the research.
 
 If supported, return a refined first-person consumer insight following this structure:
 "[Identity/Context]. [Current behavior]. But [tension/struggle]."
@@ -260,35 +233,33 @@ Also provide an insight_headline: a punchy summary of the core tension in MAXIMU
 
 Find verbatims from the research that support or contradict this hypothesis.
 Score relevance 1-10 based on evidence strength.
-If the hypothesis is NOT supported (score < 5), still return it but explain why in the insight_text.`,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.INTEGER },
-            insight_headline: { type: Type.STRING },
-            insight_text: { type: Type.STRING },
-            verbatims: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  quote: { type: Type.STRING },
-                  source_location: { type: Type.STRING }
-                },
-                required: ["quote", "source_location"]
-              }
-            },
-            relevance_score: { type: Type.INTEGER },
-            tension_type: { type: Type.STRING },
-            jtbd: { type: Type.STRING }
-          },
-          required: ["id", "insight_headline", "insight_text", "verbatims", "relevance_score", "tension_type", "jtbd"]
-        }
-      }
+If the hypothesis is NOT supported (score < 5), still return it but explain why in the insight_text.
+
+Return valid JSON only with this structure:
+{
+  "id": number,
+  "insight_headline": string,
+  "insight_text": string,
+  "verbatims": [{"quote": string, "source_location": string}],
+  "relevance_score": number,
+  "tension_type": string,
+  "jtbd": string
+}`;
+
+    const response = await client.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 2048,
+      system: systemPrompt,
+      messages: [{
+        role: "user",
+        content: `Test this hypothesis against the research: "${userInsight}"\n\nResearch:\n${pruneText(text)}`
+      }]
     });
 
-    const content = cleanAndParseJSON(response.text);
+    const textContent = response.content.find(c => c.type === 'text');
+    if (!textContent || textContent.type !== 'text') throw new Error("No text response");
+
+    const content = cleanAndParseJSON(textContent.text);
     if (!content) throw new Error("Invalid bespoke insight response");
 
     return {
@@ -304,7 +275,7 @@ If the hypothesis is NOT supported (score < 5), still return it but explain why 
 };
 
 // ============================================
-// PINK BRIEF GENERATION (NEW P&G FORMAT)
+// PINK BRIEF GENERATION
 // ============================================
 
 export const generatePinkBrief = async (
@@ -313,17 +284,19 @@ export const generatePinkBrief = async (
   researchText: string
 ): Promise<PinkBriefContent> => {
   return withRetry(async () => {
-    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY as string });
+    const client = getClient();
+
+    const verbatimsList = (insight.verbatims || []).map(v => `- "${v.quote}"`).join('\n') || '(none provided)';
 
     const inputContext = `
 SELECTED CONSUMER INSIGHT:
-${insight.insight_text}
+${insight.insight_text || '(no insight text)'}
 
 SUPPORTING VERBATIMS:
-${insight.verbatims.map(v => `- "${v.quote}"`).join('\n')}
+${verbatimsList}
 
-TENSION TYPE: ${insight.tension_type}
-JOB TO BE DONE: ${insight.jtbd}
+TENSION TYPE: ${insight.tension_type || 'functional'}
+JOB TO BE DONE: ${insight.jtbd || '(not specified)'}
 
 CATEGORY CONTEXT:
 ${categoryContext}
@@ -332,88 +305,20 @@ RESEARCH EXCERPT:
 ${pruneText(researchText, 3000)}
 `;
 
-    const response = await ai.models.generateContent({
-      model: PRO_MODEL,
-      contents: `Generate a P&G Pink Brief based on this input:\n\n${inputContext}`,
-      config: {
-        ...DETERMINISTIC_CONFIG,
-        systemInstruction: PINK_BRIEF_GENERATION_INSTRUCTIONS,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            business_objective: {
-              type: Type.OBJECT,
-              properties: {
-                to_grow: { type: Type.STRING },
-                we_need_to_get: { type: Type.STRING },
-                to: { type: Type.STRING },
-                by_forming_new_habit: { type: Type.STRING }
-              },
-              required: ["to_grow", "we_need_to_get", "to", "by_forming_new_habit"]
-            },
-            consumer_problem: {
-              type: Type.OBJECT,
-              properties: {
-                jtbd: { type: Type.STRING },
-                current_behavior: { type: Type.STRING },
-                struggle: { type: Type.STRING }
-              },
-              required: ["jtbd", "current_behavior", "struggle"]
-            },
-            communication_challenge: {
-              type: Type.OBJECT,
-              properties: {
-                from_state: { type: Type.STRING },
-                to_state: { type: Type.STRING },
-                analogy_or_device: { type: Type.STRING }
-              },
-              required: ["from_state", "to_state", "analogy_or_device"]
-            },
-            message_strategy: {
-              type: Type.OBJECT,
-              properties: {
-                benefit: { type: Type.STRING },
-                rtb: { type: Type.STRING },
-                brand_character: { type: Type.STRING }
-              },
-              required: ["benefit", "rtb", "brand_character"]
-            },
-            insights: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  insight_number: { type: Type.INTEGER },
-                  insight_text: { type: Type.STRING }
-                },
-                required: ["insight_number", "insight_text"]
-              }
-            },
-            execution: {
-              type: Type.OBJECT,
-              properties: {
-                key_media: { type: Type.ARRAY, items: { type: Type.STRING } },
-                campaign_pillars: { type: Type.ARRAY, items: { type: Type.STRING } },
-                key_considerations: { type: Type.STRING },
-                success_measures: {
-                  type: Type.OBJECT,
-                  properties: {
-                    business: { type: Type.STRING },
-                    equity: { type: Type.STRING }
-                  },
-                  required: ["business", "equity"]
-                }
-              },
-              required: ["key_media", "campaign_pillars", "key_considerations", "success_measures"]
-            }
-          },
-          required: ["business_objective", "consumer_problem", "communication_challenge", "message_strategy", "insights", "execution"]
-        }
-      }
+    const response = await client.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 4096,
+      system: PINK_BRIEF_GENERATION_INSTRUCTIONS,
+      messages: [{
+        role: "user",
+        content: `Generate a P&G Pink Brief based on this input:\n\n${inputContext}`
+      }]
     });
 
-    const content = cleanAndParseJSON(response.text);
+    const textContent = response.content.find(c => c.type === 'text');
+    if (!textContent || textContent.type !== 'text') throw new Error("No text response");
+
+    const content = cleanAndParseJSON(textContent.text);
     if (!content) throw new Error("Invalid Pink Brief response");
 
     // Ensure all required fields exist with defaults
@@ -463,50 +368,39 @@ ${pruneText(researchText, 3000)}
 // ============================================
 
 export const performStrategicSynthesis = async (research: string, insight: string) => {
-  const synthesize = async (modelName: string) => {
-    const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY as string });
-    const response = await ai.models.generateContent({
-      model: modelName,
-      contents: `Perform P&G Strategic Synthesis.\n\nResearch:\n${pruneText(research)}\n\nSelected Insight:\n${insight}`,
-      config: {
-        ...DETERMINISTIC_CONFIG,
-        systemInstruction: STRATEGIST_INSTRUCTIONS,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            redThreadEssence: { type: Type.STRING },
-            redThreadUnlock: { type: Type.STRING },
-            sections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.STRING },
-                  title: { type: Type.STRING },
-                  purpose: { type: Type.STRING },
-                  summary: { type: Type.STRING },
-                  content: { type: Type.STRING }
-                },
-                required: ["id", "title", "purpose", "summary", "content"]
-              }
-            }
-          },
-          required: ["redThreadEssence", "redThreadUnlock", "sections"]
-        }
-      }
+  return withRetry(async () => {
+    const client = getClient();
+
+    const response = await client.messages.create({
+      model: CLAUDE_MODEL,
+      max_tokens: 4096,
+      system: STRATEGIST_INSTRUCTIONS + `
+
+Return JSON with this structure:
+{
+  "redThreadEssence": string,
+  "redThreadUnlock": string,
+  "sections": [
+    {
+      "id": string,
+      "title": string,
+      "purpose": string,
+      "summary": string,
+      "content": string
+    }
+  ]
+}`,
+      messages: [{
+        role: "user",
+        content: `Perform P&G Strategic Synthesis.\n\nResearch:\n${pruneText(research)}\n\nSelected Insight:\n${insight}`
+      }]
     });
 
-    const parsed = cleanAndParseJSON(response.text);
+    const textContent = response.content.find(c => c.type === 'text');
+    if (!textContent || textContent.type !== 'text') throw new Error("No text response");
+
+    const parsed = cleanAndParseJSON(textContent.text);
     if (!parsed || !parsed.sections) throw new Error("Invalid output format");
     return parsed;
-  };
-
-  try {
-    console.log("Starting synthesis with Pro model...");
-    return await synthesize(PRO_MODEL);
-  } catch (err) {
-    console.warn("Pro model failed, falling back to Flash model...", err);
-    return await synthesize(FLASH_MODEL);
-  }
+  });
 };

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { briefService } from '../services/briefService';
+import { useAIProviderStore } from './aiProviderStore';
 import type {
   Brief,
   SourceDocument,
@@ -183,7 +184,7 @@ export const useBriefFlowStore = create<BriefFlowState>()(
             source_documents: state.sourceDocuments,
             insights_data: state.insights.length > 0 ? {
               extraction_timestamp: new Date().toISOString(),
-              model_used: 'gemini-2.0-flash',
+              model_used: useAIProviderStore.getState().provider === 'claude' ? 'claude-sonnet-4' : 'gemini-2.0-flash',
               category_context: state.categoryContext,
               insights: state.insights,
             } : null,

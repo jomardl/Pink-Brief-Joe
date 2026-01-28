@@ -70,7 +70,9 @@ export const briefService = {
       product_name: item.product?.name || item.product_name_override || item.product_name || 'Unknown',
       brand: item.product?.brand || item.brand || 'Other',
       market: item.product?.market || item.market || null,
-      category: item.product?.category || item.category || null
+      category: item.product?.category || item.category || null,
+      source_filename: item.source_filename || item.source_documents?.[0]?.filename || null,
+      model_used: item.model_used || item.insights_data?.model_used || null,
     }));
 
     return { briefs, total: count || 0 };

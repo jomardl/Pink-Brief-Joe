@@ -4,11 +4,13 @@ import { ArrowLeft, Filter, Loader2, FileText, AlertCircle } from 'lucide-react'
 import { briefService } from '../lib/services/briefService';
 import { productService } from '../lib/services/productService';
 import { isSupabaseConfigured } from '../lib/supabase/client';
+import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
 import type { BriefWithProduct, Product } from '../lib/supabase/types';
 import BriefCard from '../components/BriefCard';
 
 const BriefRepository: React.FC = () => {
   const navigate = useNavigate();
+  const reset = useBriefFlowStore((state) => state.reset);
   const [briefs, setBriefs] = useState<BriefWithProduct[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -200,7 +202,10 @@ const BriefRepository: React.FC = () => {
                 : 'Create your first brief to get started'}
             </p>
             <button
-              onClick={() => navigate('/new')}
+              onClick={() => {
+                reset();
+                navigate('/new');
+              }}
               className="h-10 px-4 bg-[#0f62fe] text-white text-sm font-medium hover:bg-[#0353e9] transition-colors"
             >
               Create New Brief

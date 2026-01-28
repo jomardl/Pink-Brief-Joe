@@ -94,7 +94,9 @@ SELECT
   COALESCE(p.name, b.product_name_override, 'Unknown') AS product_name,
   COALESCE(p.brand, 'Other') AS brand,
   p.market,
-  p.category
+  p.category,
+  b.source_documents->0->>'filename' AS source_filename,
+  b.insights_data->>'model_used' AS model_used
 FROM briefs b
 LEFT JOIN products p ON b.product_id = p.id
 WHERE b.status != 'archived';

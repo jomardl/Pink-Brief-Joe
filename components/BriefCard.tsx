@@ -1,5 +1,5 @@
-import React from 'react';
-import { FileText, Calendar, Check, Edit3, Copy, Trash2, User } from 'lucide-react';
+import React, { useState } from 'react';
+import { FileText, Calendar, Check, Edit3, Copy, Trash2, User, Link2, File, Cpu } from 'lucide-react';
 import type { BriefWithProduct } from '../lib/supabase/types';
 
 interface Props {
@@ -10,6 +10,15 @@ interface Props {
 }
 
 const BriefCard: React.FC<Props> = ({ brief, onOpen, onDuplicate, onArchive }) => {
+  const [linkCopied, setLinkCopied] = useState(false);
+
+  const copyLink = async () => {
+    const url = `${window.location.origin}/brief/${brief.id}`;
+    await navigator.clipboard.writeText(url);
+    setLinkCopied(true);
+    setTimeout(() => setLinkCopied(false), 2000);
+  };
+
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
       month: 'short',
@@ -66,7 +75,7 @@ const BriefCard: React.FC<Props> = ({ brief, onOpen, onDuplicate, onArchive }) =
         </div>
 
         {/* Meta */}
-        <div className="flex items-center gap-4 text-xs text-[#6f6f6f]">
+        <div className="flex items-center flex-wrap gap-x-4 gap-y-1 text-xs text-[#6f6f6f]">
           <span className="flex items-center gap-1">
             <Calendar size={12} />
             {formatDate(brief.created_at)}
@@ -75,6 +84,17 @@ const BriefCard: React.FC<Props> = ({ brief, onOpen, onDuplicate, onArchive }) =
             <span className="flex items-center gap-1">
               <User size={12} />
               {brief.created_by}
+            </span>
+          )}
+          {brief.source_filename && (
+            <span className="flex items-center gap-1" title={brief.source_filename}>
+              <File size={12} />
+              <span className="max-w-[120px] truncate">{brief.source_filename}</span>
+            </span>
+          )}
+          {brief.model_used && (
+            <span className="px-1.5 py-0.5 bg-[#e8daff] text-[#6929c4] rounded text-[10px] font-medium">
+              {brief.model_used.replace('gemini-', '').replace('claude-', '')}
             </span>
           )}
           {brief.market && (
@@ -92,6 +112,13 @@ const BriefCard: React.FC<Props> = ({ brief, onOpen, onDuplicate, onArchive }) =
           className="h-8 px-3 bg-[#0f62fe] text-white text-xs font-medium hover:bg-[#0353e9] transition-colors"
         >
           {brief.status === 'draft' ? 'Continue Editing' : 'View'}
+        </button>
+        <button
+          onClick={copyLink}
+          className="h-8 px-3 text-[#525252] text-xs font-medium flex items-center gap-1 hover:bg-[#f4f4f4] transition-colors"
+        >
+          <Link2 size={12} />
+          {linkCopied ? 'Copied!' : 'Copy Link'}
         </button>
         <button
           onClick={() => onDuplicate(brief.id)}

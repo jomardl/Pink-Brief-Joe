@@ -1,13 +1,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Printer, Loader2, RotateCcw, Edit2, X, ChevronDown, FileText, File, Save, Trash2, Check } from 'lucide-react';
-import { generatePinkBrief } from '../geminiService';
+import { Download, Printer, Loader2, RotateCcw, Edit2, X, ChevronDown, FileText, File, Save, Trash2, Check, Cpu } from 'lucide-react';
+import { generatePinkBrief } from '../aiService';
 import { BriefData, PinkBriefContent } from '../types';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
+import { useAIProviderStore } from '../lib/stores/aiProviderStore';
 import { isSupabaseConfigured } from '../lib/supabase/client';
 import { briefService } from '../lib/services/briefService';
 import ConfirmDialog from './ConfirmDialog';
@@ -53,6 +54,7 @@ const FieldRow = ({
 const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) => {
   const [content, setContent] = useState<PinkBriefContent | null>(briefData.pinkBrief);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -63,30 +65,53 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
   const exportMenuRef = useRef<HTMLDivElement>(null);
 
   const dbConfigured = isSupabaseConfigured();
-  const { briefId, completeBrief, reset: resetStore } = useBriefFlowStore();
+  const { briefId, completeBrief, setPinkBrief, reset: resetStore, sourceDocuments } = useBriefFlowStore();
 
-  useEffect(() => {
-    const generate = async () => {
-      if (content) return;
-      if (!briefData.selectedInsight) return;
+  // Get source filename from store or briefData
+  const sourceFilename = sourceDocuments?.[0]?.filename || null;
 
-      setIsLoading(true);
-      onProcessing(true);
-      try {
-        const result = await generatePinkBrief(
+  // Get model used from AI provider store
+  const modelUsed = useAIProviderStore((state) => state.provider);
+
+  const TIMEOUT_MS = 90000; // 90 seconds
+
+  const runGeneration = async () => {
+    if (!briefData.selectedInsight) return;
+
+    setIsLoading(true);
+    setError(null);
+    onProcessing(true);
+
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('Generation timed out. Please try again.')), TIMEOUT_MS)
+    );
+
+    try {
+      const result = await Promise.race([
+        generatePinkBrief(
           briefData.selectedInsight,
           briefData.categoryContext,
           briefData.researchText
-        );
-        setContent(result);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setIsLoading(false);
-        onProcessing(false);
+        ),
+        timeoutPromise
+      ]);
+      setContent(result);
+      // Sync to store so it can be saved to database
+      if (result) {
+        setPinkBrief(result);
       }
-    };
-    generate();
+    } catch (err: any) {
+      console.error('Pink Brief generation failed:', err);
+      setError(err.message || 'Failed to generate brief. Please try again.');
+    } finally {
+      setIsLoading(false);
+      onProcessing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (content) return;
+    runGeneration();
   }, [briefData.selectedInsight]);
 
   // Close export menu when clicking outside
@@ -394,6 +419,10 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
   };
 
   const toggleEdit = (section: string) => {
+    // If we're closing an edit (currently editing this section), sync to store
+    if (editingSection === section && content) {
+      setPinkBrief(content);
+    }
     setEditingSection(editingSection === section ? null : section);
   };
 
@@ -407,6 +436,13 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
 
     setIsSavingBrief(true);
     try {
+      // Sync current content to store before saving (in case edits weren't closed)
+      if (content) {
+        setPinkBrief(content);
+      }
+      // Close any open editing section
+      setEditingSection(null);
+
       await completeBrief();
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 3000);
@@ -444,7 +480,49 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
     );
   }
 
-  if (!content) return null;
+  if (error) {
+    return (
+      <div className="max-w-lg mx-auto py-16 text-center">
+        <div className="w-16 h-16 bg-[#fff1f1] flex items-center justify-center mx-auto mb-6">
+          <FileText size={32} className="text-[#da1e28]" />
+        </div>
+        <h3 className="text-2xl font-light text-[#161616] mb-2">Generation failed</h3>
+        <p className="text-sm text-[#525252] mb-6">{error}</p>
+        {briefData.selectedInsight && (
+          <button
+            onClick={runGeneration}
+            className="h-10 px-6 bg-[#0f62fe] text-white text-sm font-medium hover:bg-[#0353e9] transition-colors"
+          >
+            Try Again
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  if (!content) {
+    return (
+      <div className="max-w-lg mx-auto py-16 text-center">
+        <div className="w-16 h-16 bg-[#fff8e1] flex items-center justify-center mx-auto mb-6">
+          <FileText size={32} className="text-[#f57f17]" />
+        </div>
+        <h3 className="text-2xl font-light text-[#161616] mb-2">Brief content not available</h3>
+        <p className="text-sm text-[#525252] mb-6">
+          {briefData.selectedInsight
+            ? 'The brief content was not saved. Click below to regenerate it.'
+            : 'This brief is missing required data to display.'}
+        </p>
+        {briefData.selectedInsight && (
+          <button
+            onClick={runGeneration}
+            className="h-10 px-6 bg-[#0f62fe] text-white text-sm font-medium hover:bg-[#0353e9] transition-colors"
+          >
+            Regenerate Brief
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto">
@@ -463,6 +541,22 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
             <span className="text-xs font-mono px-3 py-1 bg-[#fff1f1] text-[#da1e28]">
               Confidential
             </span>
+          </div>
+
+          {/* Source & Model Info */}
+          <div className="flex items-center gap-4 mt-4 text-xs text-[#6f6f6f]">
+            {sourceFilename && (
+              <span className="flex items-center gap-1.5">
+                <File size={12} />
+                <span>Source: <span className="text-[#161616]">{sourceFilename}</span></span>
+              </span>
+            )}
+            {modelUsed && (
+              <span className="flex items-center gap-1.5">
+                <Cpu size={12} />
+                <span>Generated with: <span className="px-1.5 py-0.5 bg-[#e8daff] text-[#6929c4] rounded font-medium">{modelUsed === 'claude' ? 'Claude' : 'Gemini'}</span></span>
+              </span>
+            )}
           </div>
         </div>
 
