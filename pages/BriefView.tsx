@@ -5,11 +5,12 @@ import { briefService } from '../lib/services/briefService';
 import { isSupabaseConfigured } from '../lib/supabase/client';
 import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
 import type { Brief } from '../lib/supabase/types';
-import { BriefData, INITIAL_BRIEF_DATA, PinkBriefContent, ExtractedInsight } from '../types';
+import { BriefData, INITIAL_BRIEF_DATA, PinkBriefContent, ExtractedInsight, StrategicSection } from '../types';
 import SummaryModule from '../components/SummaryModule';
 import ResearchViewer from '../components/viewers/ResearchViewer';
 import InsightsViewer from '../components/viewers/InsightsViewer';
 import StrategyViewer from '../components/viewers/StrategyViewer';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 type TabId = 'research' | 'insights' | 'strategy' | 'brief';
 
@@ -30,6 +31,9 @@ const BriefView: React.FC = () => {
   const [linkCopied, setLinkCopied] = useState(false);
   const [isLoadingForEdit, setIsLoadingForEdit] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('brief');
+  const [strategyEdited, setStrategyEdited] = useState(false);
+  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
+  const [isRegenerating, setIsRegenerating] = useState(false);
 
   const copyLink = async () => {
     const url = `${window.location.origin}/brief/${id}`;
@@ -84,6 +88,69 @@ const BriefView: React.FC = () => {
 
   const handleReset = () => {
     navigate('/briefs');
+  };
+
+  // Handle strategy updates
+  const handleStrategyUpdate = async (data: { redThreadEssence?: string; redThreadUnlock?: string; sections?: StrategicSection[] }) => {
+    if (!brief || !id) return;
+
+    // Mark that strategy was edited (so we can prompt for regeneration)
+    setStrategyEdited(true);
+
+    // Update local state
+    const updatedMarketingSummary = {
+      ...brief.marketing_summary,
+      red_thread_essence: data.redThreadEssence ?? brief.marketing_summary?.red_thread_essence ?? '',
+      red_thread_unlock: data.redThreadUnlock ?? brief.marketing_summary?.red_thread_unlock ?? '',
+      sections: data.sections ?? brief.marketing_summary?.sections ?? [],
+    };
+
+    setBrief(prev => prev ? {
+      ...prev,
+      marketing_summary: updatedMarketingSummary,
+    } : null);
+
+    // Save to database
+    try {
+      await briefService.update(id, {
+        marketing_summary: updatedMarketingSummary,
+      });
+    } catch (err) {
+      console.error('Failed to save strategy updates:', err);
+    }
+  };
+
+  // Handle tab change with strategy edit check
+  const handleTabChange = (tab: TabId) => {
+    // If switching to Brief tab and strategy was edited, ask about regeneration
+    if (tab === 'brief' && strategyEdited && brief?.pink_brief) {
+      setShowRegenerateDialog(true);
+    } else {
+      setActiveTab(tab);
+    }
+  };
+
+  // Handle regeneration confirmation
+  const handleConfirmRegenerate = async () => {
+    setShowRegenerateDialog(false);
+    setStrategyEdited(false);
+    // Clear the pink brief to trigger regeneration in SummaryModule
+    if (brief && id) {
+      setBrief(prev => prev ? { ...prev, pink_brief: null } : null);
+      try {
+        await briefService.update(id, { pink_brief: null, status: 'draft' });
+      } catch (err) {
+        console.error('Failed to clear brief:', err);
+      }
+    }
+    setActiveTab('brief');
+  };
+
+  // Handle skip regeneration
+  const handleSkipRegenerate = () => {
+    setShowRegenerateDialog(false);
+    setStrategyEdited(false);
+    setActiveTab('brief');
   };
 
   // Convert DB brief to BriefData format for SummaryModule
@@ -185,7 +252,7 @@ const BriefView: React.FC = () => {
               return (
                 <button
                   key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
+                  onClick={() => handleTabChange(tab.id)}
                   className={`px-6 py-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-2 ${
                     activeTab === tab.id
                       ? 'border-[#0f62fe] text-[#0f62fe]'
@@ -216,9 +283,10 @@ const BriefView: React.FC = () => {
           )}
           {activeTab === 'strategy' && (
             <StrategyViewer
-              redThreadEssence={briefData.redThreadEssence}
+              redThreadEssence={brief.marketing_summary?.red_thread_essence || ''}
               redThreadUnlock={brief.marketing_summary?.red_thread_unlock || ''}
-              sections={briefData.marketingSummarySections}
+              sections={brief.marketing_summary?.sections || []}
+              onUpdate={handleStrategyUpdate}
             />
           )}
           {activeTab === 'brief' && (
@@ -232,6 +300,18 @@ const BriefView: React.FC = () => {
             </div>
           )}
         </main>
+
+        {/* Regeneration confirmation dialog */}
+        <ConfirmDialog
+          isOpen={showRegenerateDialog}
+          title="Regenerate Brief?"
+          message="You've edited the strategy. Would you like to regenerate the Pink Brief based on your changes? This will replace the current brief content."
+          confirmLabel="Regenerate"
+          cancelLabel="Keep Current Brief"
+          variant="warning"
+          onConfirm={handleConfirmRegenerate}
+          onCancel={handleSkipRegenerate}
+        />
       </div>
     );
   }

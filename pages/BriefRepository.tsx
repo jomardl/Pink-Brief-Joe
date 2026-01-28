@@ -7,6 +7,7 @@ import { isSupabaseConfigured } from '../lib/supabase/client';
 import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
 import type { BriefWithProduct, Product } from '../lib/supabase/types';
 import BriefCard from '../components/BriefCard';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const BriefRepository: React.FC = () => {
   const navigate = useNavigate();
@@ -20,6 +21,10 @@ const BriefRepository: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<'all' | 'draft' | 'complete'>('all');
   const [sortBy, setSortBy] = useState<'recent' | 'oldest' | 'alpha'>('recent');
+
+  // Archive dialog state
+  const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [archivingBriefId, setArchivingBriefId] = useState<string | null>(null);
 
   useEffect(() => {
     loadData();
@@ -60,15 +65,28 @@ const BriefRepository: React.FC = () => {
     }
   };
 
-  const handleArchive = async (id: string) => {
-    if (!confirm('Are you sure you want to archive this brief?')) return;
+  const handleArchive = (id: string) => {
+    setArchivingBriefId(id);
+    setShowArchiveDialog(true);
+  };
+
+  const confirmArchive = async () => {
+    if (!archivingBriefId) return;
 
     try {
-      await briefService.archive(id);
-      setBriefs(briefs.filter(b => b.id !== id));
+      await briefService.archive(archivingBriefId);
+      setBriefs(briefs.filter(b => b.id !== archivingBriefId));
     } catch (err: any) {
       setError(err.message || 'Failed to archive brief');
+    } finally {
+      setShowArchiveDialog(false);
+      setArchivingBriefId(null);
     }
+  };
+
+  const cancelArchive = () => {
+    setShowArchiveDialog(false);
+    setArchivingBriefId(null);
   };
 
   // Sort briefs
@@ -225,6 +243,18 @@ const BriefRepository: React.FC = () => {
           </div>
         )}
       </main>
+
+      {/* Archive confirmation dialog */}
+      <ConfirmDialog
+        isOpen={showArchiveDialog}
+        title="Archive Brief"
+        message="Are you sure you want to archive this brief? You can restore it later from the archived items."
+        confirmLabel="Archive"
+        cancelLabel="Cancel"
+        variant="danger"
+        onConfirm={confirmArchive}
+        onCancel={cancelArchive}
+      />
     </div>
   );
 };
