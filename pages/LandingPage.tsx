@@ -71,7 +71,7 @@ const LandingPage: React.FC = () => {
 
           {!dbConfigured && (
             <p className="mt-4 text-xs text-[#6f6f6f]">
-              Configure Supabase to enable brief persistence and repository features.
+
             </p>
           )}
         </div>

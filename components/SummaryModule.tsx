@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Printer, Loader2, RotateCcw, Edit2, X, ChevronDown, FileText, File, Save, Trash2 } from 'lucide-react';
+import { Download, Printer, Loader2, RotateCcw, Edit2, X, ChevronDown, FileText, File, Save, Trash2, Check } from 'lucide-react';
 import { generatePinkBrief } from '../geminiService';
 import { BriefData, PinkBriefContent } from '../types';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType } from 'docx';
@@ -866,15 +866,21 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
           {dbConfigured && (
             <button
               onClick={handleSaveBrief}
-              disabled={isSavingBrief}
-              className="h-10 px-4 bg-[#24a148] text-white text-sm font-medium flex items-center gap-2 hover:bg-[#198038] transition-colors disabled:bg-[#c6c6c6]"
+              disabled={isSavingBrief || showSaveSuccess}
+              className={`h-10 px-4 text-white text-sm font-medium flex items-center gap-2 transition-colors ${
+                showSaveSuccess
+                  ? 'bg-[#24a148] cursor-default'
+                  : 'bg-[#24a148] hover:bg-[#198038] disabled:bg-[#c6c6c6]'
+              }`}
             >
               {isSavingBrief ? (
                 <Loader2 size={14} className="animate-spin" />
+              ) : showSaveSuccess ? (
+                <Check size={14} />
               ) : (
                 <Save size={14} />
               )}
-              Save Brief
+              {showSaveSuccess ? 'Saved' : 'Save Brief'}
             </button>
           )}
         </div>

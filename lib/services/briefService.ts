@@ -31,6 +31,7 @@ export const briefService = {
         .select(`
           id,
           title,
+          created_by,
           status,
           created_at,
           updated_at,
@@ -61,14 +62,15 @@ export const briefService = {
     const briefs: BriefWithProduct[] = (data || []).map((item: any) => ({
       id: item.id,
       title: item.title,
+      created_by: item.created_by || null,
       status: item.status,
       created_at: item.created_at,
       updated_at: item.updated_at,
       completed_at: item.completed_at,
-      product_name: item.product?.name || item.product_name_override || 'Unknown',
-      brand: item.product?.brand || 'Other',
-      market: item.product?.market || null,
-      category: item.product?.category || null
+      product_name: item.product?.name || item.product_name_override || item.product_name || 'Unknown',
+      brand: item.product?.brand || item.brand || 'Other',
+      market: item.product?.market || item.market || null,
+      category: item.product?.category || item.category || null
     }));
 
     return { briefs, total: count || 0 };
