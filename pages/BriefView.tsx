@@ -227,6 +227,7 @@ const BriefView: React.FC = () => {
                 briefData={briefData}
                 onReset={handleReset}
                 onProcessing={() => {}}
+                isAlreadySaved={brief.status === 'complete'}
               />
             </div>
           )}

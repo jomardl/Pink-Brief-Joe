@@ -17,6 +17,7 @@ interface Props {
   briefData: BriefData;
   onReset: () => void;
   onProcessing: (val: boolean) => void;
+  isAlreadySaved?: boolean; // true when viewing from BriefView (already complete)
 }
 
 const SectionHeader = ({ title }: { title: string }) => (
@@ -51,7 +52,7 @@ const FieldRow = ({
   </div>
 );
 
-const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) => {
+const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAlreadySaved = false }) => {
   const [content, setContent] = useState<PinkBriefContent | null>(briefData.pinkBrief);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -974,7 +975,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing }) =>
               ) : (
                 <Save size={14} />
               )}
-              {showSaveSuccess ? 'Saved' : 'Save Brief'}
+              {showSaveSuccess ? 'Saved' : isAlreadySaved ? 'Update Brief' : 'Save Brief'}
             </button>
           )}
         </div>
