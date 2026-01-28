@@ -8,35 +8,52 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-            overflow-x: hidden;
+        :root {
+            --plex-black: #161616;
+            --plex-gray-100: #f4f4f4;
+            --plex-gray-90: #262626;
+            --plex-gray-80: #393939;
+            --plex-gray-70: #525252;
+            --plex-gray-60: #6f6f6f;
+            --plex-gray-50: #8d8d8d;
+            --plex-gray-40: #a8a8a8;
+            --plex-gray-30: #c6c6c6;
+            --plex-gray-20: #e0e0e0;
+            --plex-gray-10: #f4f4f4;
+            --plex-white: #ffffff;
+            --plex-blue: #0f62fe;
+            --plex-blue-hover: #0353e9;
         }
-        .pg-blue { color: #003da5; }
-        .pg-bg-blue { background-color: #003da5; }
-        .glass-morphism {
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(12px);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+        body {
+            font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: var(--plex-gray-10);
+            color: var(--plex-black);
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+        .font-mono {
+            font-family: 'IBM Plex Mono', monospace;
+        }
+        .pg-blue { color: var(--plex-blue); }
+        .pg-bg-blue { background-color: var(--plex-blue); }
+
+        /* IBM-style focus states */
+        button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible {
+            outline: 2px solid var(--plex-blue);
+            outline-offset: 2px;
+        }
+
+        /* Clean transitions */
+        * {
+            transition-timing-function: cubic-bezier(0.2, 0, 0.38, 0.9);
         }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "framer-motion": "https://esm.sh/framer-motion@^12.27.5"
-  }
-}
-</script>
 </head>
 <body>
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
 </body>
 </html>

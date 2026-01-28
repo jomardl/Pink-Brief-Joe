@@ -1,67 +1,66 @@
 
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Lightbulb, 
-  ChevronRight, 
-  Check, 
-  Quote, 
-  BarChart3, 
-  MessageSquare, 
-  ChevronDown, 
-  ChevronUp, 
-  Languages, 
-  Beaker, 
-  Search, 
-  Loader2, 
-  Sparkles,
+import {
+  Check,
+  Quote,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  Loader2,
   Edit2,
   Save,
-  FileSearch,
-  Info,
   AlertTriangle,
-  History
+  ArrowRight,
+  Briefcase,
+  Heart,
+  Users,
+  User
 } from 'lucide-react';
-import { ExtractedInsight, BriefData } from '../types.ts';
-import { testBespokeInsight } from '../geminiService.ts';
+import { ExtractedInsight, BriefData, TensionType } from '../types';
+import { testBespokeInsight } from '../geminiService';
 
 interface Props {
   onNext: (data: Partial<BriefData>) => void;
   research: string;
   extractedInsights: ExtractedInsight[];
-  selectedInsight: string;
+  selectedInsight: ExtractedInsight | null;
+  categoryContext: string;
   onProcessing: (val: boolean) => void;
 }
 
-const STRATEGIC_THRESHOLD = 30; // Minimum percentage for P&G Standard
+const RELEVANCE_THRESHOLD = 5; // Minimum score out of 10
 
-const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, selectedInsight, onProcessing }) => {
+const tensionTypeConfig: Record<TensionType, { icon: React.ElementType; label: string; color: string }> = {
+  functional: { icon: Briefcase, label: 'Functional', color: 'bg-blue-100 text-blue-700' },
+  emotional: { icon: Heart, label: 'Emotional', color: 'bg-pink-100 text-pink-700' },
+  social: { icon: Users, label: 'Social', color: 'bg-purple-100 text-purple-700' },
+  identity: { icon: User, label: 'Identity', color: 'bg-amber-100 text-amber-700' }
+};
+
+const InsightsModule: React.FC<Props> = ({
+  onNext,
+  research,
+  extractedInsights,
+  selectedInsight,
+  categoryContext,
+  onProcessing
+}) => {
   const [localInsights, setLocalInsights] = useState<ExtractedInsight[]>(extractedInsights);
   const [expandedIndices, setExpandedIndices] = useState<Set<number | string>>(new Set());
-  
-  const initialIndex = extractedInsights.findIndex(i => i.insight === selectedInsight);
+
+  const initialIndex = extractedInsights.findIndex(i => i.id === selectedInsight?.id);
   const [localSelected, setLocalSelected] = useState<number | string | null>(
     initialIndex !== -1 ? initialIndex : (selectedInsight ? 'bespoke' : null)
   );
 
   const [editingId, setEditingId] = useState<number | string | null>(null);
-  const [tempInsight, setTempInsight] = useState('');
-  const [tempExplanation, setTempExplanation] = useState('');
+  const [tempInsightText, setTempInsightText] = useState('');
 
   const [bespokeInput, setBespokeInput] = useState('');
   const [isTestingBespoke, setIsTestingBespoke] = useState(false);
   const [bespokeResult, setBespokeResult] = useState<ExtractedInsight | null>(
-    (selectedInsight && initialIndex === -1) ? {
-      insight: selectedInsight,
-      plainEnglishExplanation: 'Bespoke strategic insight',
-      rank: 99,
-      reasoning: 'User defined insight',
-      verbatims: [],
-      mentions: [],
-      matchPercentage: 100,
-      mentionCount: 1,
-      totalEvidenceFrequency: "Custom hypothesis"
-    } : null
+    selectedInsight && initialIndex === -1 ? selectedInsight : null
   );
 
   useEffect(() => {
@@ -81,26 +80,28 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
 
   const handleSelect = (id: number | string) => {
     if (editingId !== null) return;
-    if (id === 'bespoke' && bespokeResult && (bespokeResult.matchPercentage < STRATEGIC_THRESHOLD || bespokeResult.mentionCount === 0)) {
-        return;
+
+    // Check threshold for bespoke
+    if (id === 'bespoke' && bespokeResult && bespokeResult.relevance_score < RELEVANCE_THRESHOLD) {
+      return;
     }
+
     setLocalSelected(id);
   };
 
   const startEditing = (e: React.MouseEvent, id: number | string, item: ExtractedInsight) => {
     e.stopPropagation();
     setEditingId(id);
-    setTempInsight(item.insight);
-    setTempExplanation(item.plainEnglishExplanation);
+    setTempInsightText(item.insight_text);
   };
 
   const saveEdit = (e: React.MouseEvent, id: number | string) => {
     e.stopPropagation();
     if (id === 'bespoke' && bespokeResult) {
-      setBespokeResult({ ...bespokeResult, insight: tempInsight, plainEnglishExplanation: tempExplanation });
+      setBespokeResult({ ...bespokeResult, insight_text: tempInsightText });
     } else if (typeof id === 'number') {
       const newList = [...localInsights];
-      newList[id] = { ...newList[id], insight: tempInsight, plainEnglishExplanation: tempExplanation };
+      newList[id] = { ...newList[id], insight_text: tempInsightText };
       setLocalInsights(newList);
     }
     setEditingId(null);
@@ -117,9 +118,8 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
     onProcessing(true);
     try {
       const result = await testBespokeInsight(research, bespokeInput);
-      const newBespoke = { ...result, rank: 99 };
-      setBespokeResult(newBespoke);
-      if (newBespoke.matchPercentage >= STRATEGIC_THRESHOLD && newBespoke.mentionCount > 0) {
+      setBespokeResult(result);
+      if (result.relevance_score >= RELEVANCE_THRESHOLD) {
         setLocalSelected('bespoke');
       } else {
         setLocalSelected(null);
@@ -132,19 +132,18 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
     }
   };
 
-  const getSelectedText = () => {
-    if (localSelected === 'bespoke' && bespokeResult) return bespokeResult.insight;
+  const getSelectedInsight = (): ExtractedInsight | null => {
+    if (localSelected === 'bespoke' && bespokeResult) return bespokeResult;
     if (typeof localSelected === 'number' && localSelected >= 0) {
-      return localInsights[localSelected]?.insight || '';
+      return localInsights[localSelected] || null;
     }
-    return '';
+    return null;
   };
 
-  const handleGo = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const text = getSelectedText();
-    if (text) {
-      onNext({ selectedInsight: text });
+  const handleContinue = () => {
+    const insight = getSelectedInsight();
+    if (insight) {
+      onNext({ selectedInsight: insight });
     }
   };
 
@@ -152,243 +151,250 @@ const InsightsModule: React.FC<Props> = ({ onNext, research, extractedInsights, 
     const isSelected = localSelected === id;
     const isExpanded = expandedIndices.has(id);
     const isEditing = editingId === id;
-    const sortedMentions = [...(item.mentions || [])].sort((a, b) => b.relevanceScore - a.relevanceScore);
-    const topMentions = sortedMentions.slice(0, 4);
-    
     const isBespoke = id === 'bespoke';
-    const isBelowThreshold = isBespoke && (item.matchPercentage < STRATEGIC_THRESHOLD || item.mentionCount === 0);
+    const isBelowThreshold = item.relevance_score < RELEVANCE_THRESHOLD;
+
+    const tensionConfig = tensionTypeConfig[item.tension_type] || tensionTypeConfig.functional;
+    const TensionIcon = tensionConfig.icon;
 
     return (
-      <motion.div 
+      <div
         key={id}
-        layout
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
         onClick={() => handleSelect(id)}
-        className={`group relative flex flex-col bg-white border-2 rounded-[2.5rem] transition-all cursor-pointer overflow-hidden min-h-[400px] h-full ${
-          isSelected 
-            ? 'border-[#003da5] shadow-2xl shadow-blue-100 ring-8 ring-blue-50/50 scale-[1.02] z-10' 
+        className={`bg-white border transition-all duration-150 cursor-pointer ${
+          isSelected
+            ? 'border-[#0f62fe] ring-2 ring-[#0f62fe] ring-opacity-20'
             : isBelowThreshold
-            ? 'border-rose-100 bg-rose-50/20 grayscale'
-            : 'border-slate-50 hover:border-blue-100 hover:shadow-xl'
+            ? 'border-[#e0e0e0] opacity-50'
+            : 'border-[#e0e0e0] hover:border-[#8d8d8d]'
         }`}
       >
-        <div className={`p-8 space-y-6 flex-1 flex flex-col ${isSelected ? 'pb-32' : 'pb-8'}`}>
-          <div className="flex items-start justify-between">
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-xl transition-all ${
-                  isSelected ? 'bg-[#003da5] text-white' : isBelowThreshold ? 'bg-rose-100 text-rose-400' : 'bg-blue-50 text-blue-600 group-hover:bg-blue-100'
-                }`}>
-                  {isBespoke ? <Sparkles size={20} /> : (typeof id === 'number' ? id + 1 : '')}
-                </div>
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                  isBelowThreshold ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-blue-50 text-blue-700 border-blue-100'
-                }`}>
-                  <FileSearch size={12} /> {isBelowThreshold ? 'Violation' : item.totalEvidenceFrequency}
-                </div>
+        {/* Card header */}
+        <div className="p-6">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div className="flex items-center gap-3">
+              <div className={`w-8 h-8 flex items-center justify-center text-sm font-mono ${
+                isSelected
+                  ? 'bg-[#0f62fe] text-white'
+                  : isBelowThreshold
+                  ? 'bg-[#da1e28] text-white'
+                  : 'bg-[#e0e0e0] text-[#525252]'
+              }`}>
+                {isBespoke ? 'H' : item.id}
               </div>
-              <div className="flex flex-wrap gap-2">
-                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-wider border ${
-                   isBelowThreshold ? 'bg-rose-100 text-rose-700 border-rose-200' : 'bg-green-50 text-green-700 border-green-100'
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-xs font-mono px-2 py-1 ${
+                  isBelowThreshold ? 'bg-[#fff1f1] text-[#da1e28]' : 'bg-[#e0e0e0] text-[#525252]'
                 }`}>
-                  <BarChart3 size={12} /> {item.matchPercentage}% Impact
-                </div>
-                {!isBelowThreshold && (
-                  <motion.div 
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-[9px] font-black uppercase tracking-wider border border-indigo-100 shadow-sm"
-                  >
-                    <MessageSquare size={12} /> {item.mentionCount} Quotes
-                    <Info size={10} className="ml-0.5 opacity-40" />
-                  </motion.div>
-                )}
+                  {item.relevance_score}/10 relevance
+                </span>
+                <span className={`text-xs px-2 py-1 flex items-center gap-1 ${tensionConfig.color}`}>
+                  <TensionIcon size={12} />
+                  {tensionConfig.label}
+                </span>
               </div>
             </div>
-            
+
             <div className="flex items-center gap-2">
               {!isEditing && !isBelowThreshold && (
-                <button 
+                <button
                   onClick={(e) => startEditing(e, id, item)}
-                  className="p-2 bg-slate-50 text-slate-400 rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all"
-                  title="Edit"
+                  className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
                 >
-                  <Edit2 size={16} />
+                  <Edit2 size={14} />
                 </button>
               )}
               {isSelected && (
-                <motion.div 
-                  initial={{ scale: 0 }} 
-                  animate={{ scale: 1 }} 
-                  className="w-8 h-8 bg-green-500 text-white rounded-full flex items-center justify-center shadow-lg shadow-green-100"
-                >
-                  <Check size={16} strokeWidth={3} />
-                </motion.div>
+                <div className="w-6 h-6 bg-[#0f62fe] flex items-center justify-center">
+                  <Check size={14} className="text-white" />
+                </div>
               )}
             </div>
           </div>
 
-          <div className="space-y-4 flex-1">
-            {isEditing ? (
-              <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
-                <input 
-                  autoFocus
-                  value={tempInsight}
-                  onChange={(e) => setTempInsight(e.target.value)}
-                  className="w-full text-xl font-black text-slate-900 bg-slate-50 border-2 border-blue-200 rounded-2xl p-4 focus:ring-4 focus:ring-blue-100 outline-none"
-                />
-                <textarea 
-                  value={tempExplanation}
-                  onChange={(e) => setTempExplanation(e.target.value)}
-                  className="w-full text-xs font-bold text-slate-600 bg-slate-50 border-2 border-blue-200 rounded-2xl p-4 focus:ring-4 focus:ring-blue-100 outline-none resize-none h-24"
-                />
-                <div className="flex justify-end gap-2">
-                  <button onClick={cancelEdit} className="px-3 py-1.5 bg-slate-200 text-slate-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-slate-300">Cancel</button>
-                  <button onClick={(e) => saveEdit(e, id)} className="px-4 py-1.5 bg-blue-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-blue-700 flex items-center gap-1">
-                    <Save size={12} /> Save
-                  </button>
-                </div>
+          {/* Content */}
+          {isEditing ? (
+            <div className="space-y-3" onClick={(e) => e.stopPropagation()}>
+              <textarea
+                autoFocus
+                value={tempInsightText}
+                onChange={(e) => setTempInsightText(e.target.value)}
+                className="w-full text-base text-[#161616] bg-[#f4f4f4] border border-[#e0e0e0] p-3 focus:outline-none focus:border-[#0f62fe] resize-none h-32"
+              />
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={cancelEdit}
+                  className="px-3 py-2 text-sm text-[#525252] hover:bg-[#e0e0e0] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={(e) => saveEdit(e, id)}
+                  className="px-3 py-2 text-sm bg-[#0f62fe] text-white hover:bg-[#0353e9] flex items-center gap-1 transition-colors"
+                >
+                  <Save size={14} /> Save
+                </button>
               </div>
-            ) : (
-              <div className="space-y-3">
-                <h3 className={`text-xl font-black leading-tight tracking-tight pr-4 ${isBelowThreshold ? 'text-rose-300' : 'text-slate-900'}`}>
-                  {item.insight}
+            </div>
+          ) : (
+            <div>
+              {/* Insight Headline - Large prominent text */}
+              {item.insight_headline && (
+                <h3 className={`text-xl font-semibold mb-3 ${isBelowThreshold ? 'text-[#a8a8a8]' : 'text-[#161616]'}`}>
+                  {item.insight_headline}
                 </h3>
-                
-                {isBelowThreshold ? (
-                  <div className="flex items-start gap-3 p-4 bg-rose-100/50 rounded-2xl border border-rose-200">
-                    <AlertTriangle size={20} className="text-rose-600 shrink-0" />
-                    <div>
-                      <p className="text-[9px] font-black uppercase tracking-widest text-rose-700 mb-0.5">Below Threshold</p>
-                      <p className="text-xs font-bold text-rose-600/80 leading-relaxed italic">
-                        "{item.reasoning}"
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex items-start gap-2.5 py-1">
-                    <div className="mt-1 p-1 bg-blue-50 text-blue-500 rounded-lg">
-                      <Languages size={12} />
-                    </div>
-                    <p className="text-xs font-bold text-slate-500 leading-relaxed italic">
-                      {item.plainEnglishExplanation}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+              )}
 
-          {!isBelowThreshold && (
-            <div className="pt-4 border-t border-slate-50 flex items-center justify-between">
-              <button 
-                onClick={(e) => toggleVerbatims(id, e)} 
-                className="flex items-center gap-1.5 text-[10px] font-black text-[#003da5] uppercase tracking-widest hover:underline"
-              >
-                {isExpanded ? <><ChevronUp size={14} /> Hide</> : <><ChevronDown size={14} /> Preview Evidence ({topMentions.length})</>}
-              </button>
+              {/* Full Insight Text - Smaller secondary text */}
+              <p className={`text-sm leading-relaxed mb-4 ${isBelowThreshold ? 'text-[#a8a8a8]' : 'text-[#525252]'}`}>
+                "{item.insight_text}"
+              </p>
+
+              {isBelowThreshold ? (
+                <div className="flex items-start gap-2 p-3 bg-[#fff1f1]">
+                  <AlertTriangle size={14} className="text-[#da1e28] shrink-0 mt-0.5" />
+                  <p className="text-xs text-[#da1e28]">
+                    Below threshold: Insufficient evidence in research to support this insight.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-[#f4f4f4] border-l-2 border-[#0f62fe]">
+                  <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-1">Job To Be Done</p>
+                  <p className="text-sm text-[#525252] italic">{item.jtbd}</p>
+                </div>
+              )}
             </div>
           )}
-
-          <AnimatePresence>
-            {isExpanded && (
-              <motion.div 
-                initial={{ height: 0, opacity: 0 }} 
-                animate={{ height: 'auto', opacity: 1 }} 
-                exit={{ height: 0, opacity: 0 }} 
-                className="overflow-hidden"
-              >
-                <div className="pt-4 grid gap-2">
-                  {topMentions.map((mention, idx) => (
-                    <div key={idx} className="bg-slate-50/70 p-4 rounded-xl text-[11px] text-slate-600 italic relative border border-white group/quote">
-                      <Quote size={10} className="absolute top-3 left-1 text-slate-200" />
-                      <span className="pl-4 inline-block leading-normal">"{mention.text}"</span>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
-        
-        <AnimatePresence>
-          {isSelected && !isEditing && (
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.8, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 10 }}
-              className="absolute bottom-6 right-8 z-20"
+
+        {/* Evidence section */}
+        {!isBelowThreshold && !isEditing && item.verbatims.length > 0 && (
+          <div className="border-t border-[#e0e0e0]">
+            <button
+              onClick={(e) => toggleVerbatims(id, e)}
+              className="w-full px-6 py-3 flex items-center justify-between text-xs font-medium text-[#0f62fe] hover:bg-[#f4f4f4] transition-colors"
             >
-              <button 
-                onClick={handleGo}
-                className="px-8 py-4 bg-[#003da5] text-white rounded-[1.5rem] font-black text-[11px] uppercase tracking-[0.2em] flex items-center gap-2 hover:bg-blue-800 shadow-[0_15px_30px_rgba(0,61,165,0.3)] transition-all hover:scale-105 active:scale-95 group border-2 border-white/20"
-              >
-                Confirm Truth <ChevronRight size={18} className="group-hover:translate-x-1 transition-transform" />
-              </button>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </motion.div>
+              <span>View evidence ({item.verbatims.length})</span>
+              {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+
+            <AnimatePresence>
+              {isExpanded && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="overflow-hidden"
+                >
+                  <div className="px-6 pb-4 space-y-2">
+                    {item.verbatims.map((verbatim, idx) => (
+                      <div key={idx} className="flex items-start gap-2 p-3 bg-[#f4f4f4]">
+                        <Quote size={12} className="text-[#a8a8a8] shrink-0 mt-1" />
+                        <div>
+                          <p className="text-xs text-[#525252] italic leading-relaxed">
+                            "{verbatim.quote}"
+                          </p>
+                          {verbatim.source_location && (
+                            <p className="text-[10px] text-[#a8a8a8] mt-1 font-mono">
+                              — {verbatim.source_location}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
     );
   };
 
   return (
-    <div className="max-w-[1200px] mx-auto space-y-12 py-8 flex flex-col h-full relative">
-      <div className="space-y-4 text-center">
-        <div className="inline-flex items-center justify-center p-4 bg-amber-50 text-amber-600 rounded-[2rem] mb-2 shadow-sm border border-amber-100">
-          <Lightbulb size={36} />
-        </div>
-        <h2 className="text-4xl font-black text-slate-900 tracking-tight">Market Insights</h2>
-        <p className="text-slate-500 max-w-lg mx-auto text-lg leading-relaxed">
-          Select the strategic Human Truth that will anchor your brief.
+    <div className="max-w-4xl mx-auto">
+      {/* Header */}
+      <div className="mb-8">
+        <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">
+          Step 2
+        </p>
+        <h2 className="text-3xl font-light text-[#161616] tracking-tight mb-2">
+          Select Insight
+        </h2>
+        <p className="text-sm text-[#525252] leading-relaxed">
+          Choose the consumer insight that will anchor your brief. Insights are written in first-person consumer voice.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 flex-1 content-start">
-        {localInsights.map((item, i) => renderInsightCard(item, i))}
-        
-        {bespokeResult && renderInsightCard(bespokeResult, 'bespoke')}
-
-        <div className="md:col-span-2 mt-8 p-10 bg-indigo-50/50 border-2 border-dashed border-indigo-200 rounded-[3rem] space-y-8">
-          <div className="flex items-center gap-4">
-            <div className="p-3 bg-indigo-600 text-white rounded-2xl shadow-lg shadow-indigo-200">
-              <Beaker size={24} />
-            </div>
-            <div>
-              <h3 className="text-xl font-black text-indigo-900 uppercase tracking-tight">Interrogate Hypotheses</h3>
-              <p className="text-sm text-indigo-600 font-medium">Verify specific strategic theories against the research data footprint.</p>
-            </div>
-          </div>
-
-          <div className="relative">
-            <textarea
-              value={bespokeInput}
-              onChange={(e) => setBespokeInput(e.target.value)}
-              placeholder="e.g. Gen Z parents prioritize ingredient transparency over price..."
-              className="w-full h-32 p-6 rounded-3xl border-2 border-white bg-white/80 shadow-inner text-lg font-bold text-slate-800 focus:ring-4 focus:ring-indigo-100 outline-none transition-all resize-none"
-            />
-            
-            <AnimatePresence>
-              {bespokeInput.trim().length > 10 && (
-                <motion.button
-                  initial={{ opacity: 0, scale: 0.9, y: 10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, y: 10 }}
-                  onClick={handleTestBespoke}
-                  disabled={isTestingBespoke}
-                  className="absolute bottom-4 right-4 px-8 py-3 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest flex items-center gap-3 hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 disabled:opacity-50"
-                >
-                  {isTestingBespoke ? <Loader2 className="animate-spin" size={18} /> : <Search size={18} />}
-                  {isTestingBespoke ? 'Auditing Hypothesis...' : 'Interrogate'}
-                </motion.button>
-              )}
-            </AnimatePresence>
-          </div>
-          
-          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-indigo-400 justify-center">
-            <History size={12} /> Minimum Strategic Threshold: {STRATEGIC_THRESHOLD}% Match Required
-          </div>
+      {/* Category context */}
+      {categoryContext && (
+        <div className="mb-6 p-4 bg-[#edf5ff] border-l-4 border-[#0f62fe]">
+          <p className="text-xs font-mono text-[#0f62fe] uppercase tracking-wider mb-1">Category Context</p>
+          <p className="text-sm text-[#161616]">{categoryContext}</p>
         </div>
+      )}
+
+      {/* Insights grid */}
+      <div className="grid grid-cols-1 gap-4 mb-8">
+        {localInsights.map((item, i) => renderInsightCard(item, i))}
+        {bespokeResult && renderInsightCard(bespokeResult, 'bespoke')}
       </div>
+
+      {/* Custom hypothesis section */}
+      <div className="p-6 bg-white border border-[#e0e0e0] mb-8">
+        <div className="mb-4">
+          <h3 className="text-sm font-medium text-[#161616] mb-1">Test custom hypothesis</h3>
+          <p className="text-xs text-[#6f6f6f]">
+            Write a first-person consumer statement to test against the research.
+          </p>
+        </div>
+
+        <div className="flex gap-3">
+          <textarea
+            value={bespokeInput}
+            onChange={(e) => setBespokeInput(e.target.value)}
+            placeholder='e.g., "I want to feel confident during my workout, but I worry about..."'
+            className="flex-1 h-20 p-3 bg-[#f4f4f4] border border-[#e0e0e0] text-sm text-[#161616] placeholder-[#a8a8a8] resize-none focus:outline-none focus:border-[#0f62fe]"
+          />
+          <button
+            onClick={handleTestBespoke}
+            disabled={bespokeInput.trim().length < 10 || isTestingBespoke}
+            className="px-4 bg-[#161616] text-white text-sm font-medium flex items-center gap-2 hover:bg-[#393939] disabled:bg-[#c6c6c6] disabled:cursor-not-allowed transition-colors"
+          >
+            {isTestingBespoke ? (
+              <Loader2 size={16} className="animate-spin" />
+            ) : (
+              <Search size={16} />
+            )}
+            Test
+          </button>
+        </div>
+
+        <p className="mt-3 text-xs text-[#6f6f6f] font-mono">
+          Minimum threshold: {RELEVANCE_THRESHOLD}/10 relevance required
+        </p>
+      </div>
+
+      {/* Continue button */}
+      <AnimatePresence>
+        {localSelected !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="flex justify-end"
+          >
+            <button
+              onClick={handleContinue}
+              className="h-12 px-6 bg-[#0f62fe] text-white text-sm font-medium flex items-center gap-2 hover:bg-[#0353e9] transition-colors"
+            >
+              Continue with selected insight
+              <ArrowRight size={16} />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
