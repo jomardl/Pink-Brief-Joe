@@ -296,6 +296,7 @@ const BriefView: React.FC = () => {
                 onReset={handleReset}
                 onProcessing={() => {}}
                 isAlreadySaved={brief.status === 'complete'}
+                storedModelUsed={brief.insights_data?.model_used || null}
               />
             </div>
           )}

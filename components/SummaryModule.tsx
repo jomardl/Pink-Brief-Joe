@@ -18,6 +18,7 @@ interface Props {
   onReset: () => void;
   onProcessing: (val: boolean) => void;
   isAlreadySaved?: boolean; // true when viewing from BriefView (already complete)
+  storedModelUsed?: string | null; // model from database when viewing saved brief
 }
 
 const SectionHeader = ({ title }: { title: string }) => (
@@ -52,7 +53,7 @@ const FieldRow = ({
   </div>
 );
 
-const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAlreadySaved = false }) => {
+const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAlreadySaved = false, storedModelUsed }) => {
   const [content, setContent] = useState<PinkBriefContent | null>(briefData.pinkBrief);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -71,8 +72,11 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
   // Get source filename from store or briefData
   const sourceFilename = sourceDocuments?.[0]?.filename || null;
 
-  // Get model used from AI provider store
-  const modelUsed = useAIProviderStore((state) => state.provider);
+  // Get model used - prefer stored value (for saved briefs), fall back to current provider
+  const currentProvider = useAIProviderStore((state) => state.provider);
+  const modelUsed = storedModelUsed
+    ? (storedModelUsed.includes('claude') ? 'claude' : 'gemini')
+    : currentProvider;
 
   const TIMEOUT_MS = 90000; // 90 seconds
 
