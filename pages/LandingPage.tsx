@@ -1,8 +1,9 @@
 import React from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { Plus, Folder } from 'lucide-react';
 import { isSupabaseConfigured } from '../lib/supabase/client';
 import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
+import Header from '../components/Header';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,15 +22,7 @@ const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[#f4f4f4]">
       {/* Header bar */}
-      <header className="h-12 bg-[#161616] flex items-center px-4">
-        <Link to="/">
-          <img
-            src="/pg-seeklogo.svg"
-            alt="P&G"
-            className="w-[30px] my-[5px]"
-          />
-        </Link>
-      </header>
+      <Header />
 
       {/* Main content */}
       <main className="flex-1 flex items-center justify-center p-8">

@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Upload, FileText, X, Loader2, ArrowRight, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Upload, FileText, X, Loader2, ArrowRight, AlertCircle, ExternalLink, Eye } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { extractRankedInsights } from '../aiService';
 import { BriefData } from '../types';
@@ -13,17 +13,37 @@ interface Props {
   onNext: (data: Partial<BriefData>) => void;
   currentData: string;
   onProcessing: (val: boolean) => void;
+  existingFileName?: string | null;
 }
 
 // Set PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
 
-const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) => {
-  const { setSourceDocument, setInsightsData } = useBriefFlowStore();
+const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing, existingFileName }) => {
+  const { setSourceDocument, setInsightsData, sourceDocuments } = useBriefFlowStore();
   const [text, setText] = useState(currentData);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [fileName, setFileName] = useState<string | null>(existingFileName || null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync existing filename from store if not passed as prop
+  useEffect(() => {
+    if (!fileName && sourceDocuments?.[0]?.filename) {
+      setFileName(sourceDocuments[0].filename);
+    }
+  }, [sourceDocuments, fileName]);
+
+  // Check if we have existing data (document already processed)
+  const hasExistingDocument = !!currentData && currentData.length > 0;
+
+  // Open document in new tab for viewing
+  const handleViewDocument = () => {
+    const blob = new Blob([text || currentData], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    // Clean up after a delay
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
 
   // Parse PDF files
   const parsePDF = async (file: File): Promise<string> => {
@@ -172,7 +192,7 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) 
       {/* Header */}
       <div className="mb-8">
         <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">
-          Step 1
+          Step 2
         </p>
         <h2 className="text-3xl font-light text-[#161616] tracking-tight mb-2">
           Import Research
@@ -181,6 +201,37 @@ const ResearchModule: React.FC<Props> = ({ onNext, currentData, onProcessing }) 
           Upload consumer research documents or verbatim transcripts for analysis.
         </p>
       </div>
+
+      {/* Existing document indicator */}
+      {hasExistingDocument && (
+        <div className="mb-6 p-4 bg-[#defbe6] border border-[#24a148]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-[#24a148] flex items-center justify-center">
+                <FileText size={18} className="text-white" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-[#161616]">
+                  {fileName || 'Research document'}
+                </p>
+                <p className="text-xs text-[#525252]">
+                  {currentData.length.toLocaleString()} characters · Document loaded
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={handleViewDocument}
+              className="h-9 px-4 bg-white border border-[#24a148] text-[#24a148] text-sm font-medium flex items-center gap-2 hover:bg-[#defbe6] transition-colors"
+            >
+              <ExternalLink size={14} />
+              View Full Document
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-[#525252]">
+            To replace this document, upload a new file below.
+          </p>
+        </div>
+      )}
 
       {/* Upload area */}
       <div className="space-y-4">

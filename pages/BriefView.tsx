@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Loader2, AlertCircle, Link2, Check, FileText, Lightbulb, Target, FileOutput } from 'lucide-react';
+import { Loader2, AlertCircle, Link2, Check, FileText, Lightbulb, Target, FileOutput } from 'lucide-react';
 import { briefService } from '../lib/services/briefService';
 import { isSupabaseConfigured } from '../lib/supabase/client';
 import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
@@ -11,6 +11,7 @@ import ResearchViewer from '../components/viewers/ResearchViewer';
 import InsightsViewer from '../components/viewers/InsightsViewer';
 import StrategyViewer from '../components/viewers/StrategyViewer';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Header from '../components/Header';
 
 type TabId = 'research' | 'insights' | 'strategy' | 'brief';
 
@@ -312,15 +313,11 @@ const BriefView: React.FC = () => {
   if (error || !brief) {
     return (
       <div className="min-h-screen bg-[#f4f4f4]">
-        <header className="h-12 bg-[#161616] flex items-center px-4">
-          <button
-            onClick={() => navigate('/briefs')}
-            className="text-white text-sm font-medium tracking-tight hover:text-[#a8a8a8] transition-colors flex items-center gap-2"
-          >
-            <ArrowLeft size={16} />
-            Back to Repository
-          </button>
-        </header>
+        <Header
+          breadcrumbs={[
+            { label: 'Brief Repository', href: '/briefs' },
+          ]}
+        />
 
         <main className="max-w-5xl mx-auto p-8">
           <div className="flex items-center gap-3 p-4 bg-[#fff1f1] border-l-4 border-[#da1e28]">
@@ -341,18 +338,12 @@ const BriefView: React.FC = () => {
   if (brief.pink_brief || brief.status === 'complete' || isRegenerating) {
     return (
       <div className="min-h-screen flex flex-col bg-[#f4f4f4]">
-        <header className="h-12 bg-[#161616] flex items-center justify-between px-4 shrink-0">
-          <div className="flex items-center">
-            <button
-              onClick={() => navigate('/briefs')}
-              className="text-white text-sm font-medium tracking-tight hover:text-[#a8a8a8] transition-colors flex items-center gap-2"
-            >
-              <ArrowLeft size={16} />
-              Back
-            </button>
-            <span className="mx-3 text-[#525252]">/</span>
-            <span className="text-[#c6c6c6] text-sm">{brief.title}</span>
-          </div>
+        <Header
+          breadcrumbs={[
+            { label: 'Brief Repository', href: '/briefs' },
+            { label: brief.title },
+          ]}
+        >
           <button
             onClick={copyLink}
             className="h-8 px-3 text-white text-xs font-medium flex items-center gap-1.5 hover:bg-[#393939] transition-colors rounded"
@@ -360,7 +351,7 @@ const BriefView: React.FC = () => {
             {linkCopied ? <Check size={14} /> : <Link2 size={14} />}
             {linkCopied ? 'Copied!' : 'Copy Link'}
           </button>
-        </header>
+        </Header>
 
         {/* Tab navigation */}
         <div className="border-b border-[#e0e0e0] bg-white shrink-0">

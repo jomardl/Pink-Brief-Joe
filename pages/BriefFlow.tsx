@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate, useParams, Link } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload,
@@ -20,6 +20,7 @@ import StrategyModule from '../components/StrategyModule';
 import SummaryModule from '../components/SummaryModule';
 import AIProviderToggle from '../components/AIProviderToggle';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Header from '../components/Header';
 
 type ExtendedModuleId = 0 | ModuleId; // 0 = product selection
 
@@ -199,9 +200,10 @@ const BriefFlow: React.FC = () => {
     // Determine the correct module to show
     let targetModule = stepToModule[currentStep] || 0;
 
-    // CRITICAL: If we have insights but no selected insight, force user to Insights step
-    // This prevents the "Brief content not available" error
-    if (insights.length > 0 && selectedInsightId === null && targetModule > 2) {
+    // CRITICAL: If we have insights but no selected insight AND no existing brief,
+    // force user to Insights step. This prevents the "Brief content not available" error.
+    // But if a pinkBrief already exists, allow going to Brief step to view it.
+    if (insights.length > 0 && selectedInsightId === null && !pinkBrief && targetModule > 2) {
       targetModule = 2; // Force to Insights step
     }
 
@@ -340,41 +342,23 @@ const BriefFlow: React.FC = () => {
   return (
     <div className="min-h-screen flex flex-col bg-[#f4f4f4]">
       {/* Header */}
-      <header className="h-12 bg-[#161616] flex items-center justify-between px-4 shrink-0">
-        <div className="flex items-center">
-          <Link to="/">
-            <img
-              src="/pg-seeklogo.svg"
-              alt="P&G"
-              className="w-[30px] my-[5px]"
-            />
-          </Link>
-          <span className="mx-3 text-[#525252]">/</span>
-          <span className="text-[#c6c6c6] text-sm">Pink Brief Architect</span>
-          {product && (
-            <>
-              <span className="mx-3 text-[#525252]">/</span>
-              <span className="text-[#c6c6c6] text-sm">{product.name}</span>
-            </>
-          )}
-        </div>
+      <Header
+        breadcrumbs={product ? [{ label: product.name }] : []}
+      >
+        {/* AI Provider Toggle */}
+        <AIProviderToggle />
 
-        <div className="flex items-center gap-4">
-          {/* AI Provider Toggle */}
-          <AIProviderToggle />
-
-          {/* Save status indicator */}
-          {dbConfigured && briefId && (
-            <div className="flex items-center gap-2 text-xs text-[#6f6f6f]">
-              {isSaving ? (
-                <span className="animate-pulse">Saving...</span>
-              ) : lastSaved ? (
-                <span>Saved</span>
-              ) : null}
-            </div>
-          )}
-        </div>
-      </header>
+        {/* Save status indicator */}
+        {dbConfigured && briefId && (
+          <div className="flex items-center gap-2 text-xs text-[#6f6f6f]">
+            {isSaving ? (
+              <span className="animate-pulse">Saving...</span>
+            ) : lastSaved ? (
+              <span>Saved</span>
+            ) : null}
+          </div>
+        )}
+      </Header>
 
       {/* Draft banner - shown when editing an existing brief that's not yet complete */}
       {briefId && !pinkBrief && (
@@ -505,7 +489,7 @@ const BriefFlow: React.FC = () => {
           </span>
         </div>
         <span className="text-xs text-[#6f6f6f] font-mono">
-          Step {currentModule} of 4
+          Step {currentModule + 1} of 5
         </span>
       </footer>
 

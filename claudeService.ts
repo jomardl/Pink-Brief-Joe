@@ -47,10 +47,10 @@ Generate 3-5 consumer insights. Each insight MUST:
    - "Price Anxiety Undermines Brand Loyalty"
    - "Thin Pads, Thick Worries"
    - "Reliability Clashes with Rising Costs"
-2. **verbatims**: Array of 2-4 direct quotes from the source document that support this insight
+2. **verbatims**: Array of 2-4 objects with structure {"quote": "exact quote from document", "source_location": "page/section reference if available"}
 3. **relevance_score**: 1-10 score based on how directly the verbatims support the insight
 4. **tension_type**: One of ["functional", "emotional", "social", "identity"]
-5. **jtbd**: The underlying Job To Be Done in format "When [situation], I want to [motivation], so I can [outcome]"
+5. **jtbd**: A SHORT (3-6 words) Job To Be Done statement capturing the core need. Examples: "Comfortable fit for superior protection", "Affordable quality without compromise", "Discreet confidence all day". NOT a full sentence - just the essential job.
 
 ## OUTPUT FORMAT
 
@@ -239,8 +239,29 @@ export const extractRankedInsights = async (text: string): Promise<InsightExtrac
     const content = cleanAndParseJSON(textContent.text);
     if (!content || !content.insights) throw new Error("Invalid insights response");
 
+    // Normalize verbatims to ensure correct structure {quote, source_location}
+    const normalizeVerbatims = (verbatims: any[]): {quote: string; source_location?: string}[] => {
+      if (!Array.isArray(verbatims)) return [];
+      return verbatims.map(v => {
+        if (typeof v === 'string') {
+          return { quote: v, source_location: '' };
+        }
+        if (typeof v === 'object' && v !== null) {
+          return { quote: v.quote || v.text || '', source_location: v.source_location || v.source || '' };
+        }
+        return { quote: String(v), source_location: '' };
+      });
+    };
+
+    // Ensure all insights have IDs and normalized verbatims
+    const insightsWithIds = (content.insights as ExtractedInsight[]).map((insight, index) => ({
+      ...insight,
+      id: insight.id ?? (index + 1),
+      verbatims: normalizeVerbatims(insight.verbatims),
+    }));
+
     return {
-      insights: content.insights as ExtractedInsight[],
+      insights: insightsWithIds,
       category_context: content.category_context || ""
     };
   });

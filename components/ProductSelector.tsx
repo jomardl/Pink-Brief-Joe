@@ -84,7 +84,7 @@ const ProductSelector: React.FC<Props> = ({ onSelect, onContinue, initialValue, 
       <div className="max-w-2xl mx-auto">
         <div className="mb-8">
           <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">
-            Step 0
+            Step 1
           </p>
           <h2 className="text-3xl font-light text-[#161616] tracking-tight mb-2">
             Select Product
@@ -147,7 +147,7 @@ const ProductSelector: React.FC<Props> = ({ onSelect, onContinue, initialValue, 
     <div className="max-w-2xl mx-auto">
       <div className="mb-8">
         <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">
-          Step 0
+          Step 1
         </p>
         <h2 className="text-3xl font-light text-[#161616] tracking-tight mb-2">
           Select Product

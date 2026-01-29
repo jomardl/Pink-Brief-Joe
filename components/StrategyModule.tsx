@@ -263,7 +263,7 @@ const StrategyModule: React.FC<Props> = ({ onNext, onBack, briefData, onProcessi
       {/* Header */}
       <div className="mb-8">
         <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">
-          Step 3
+          Step 4
         </p>
         <h2 className="text-3xl font-light text-[#161616] tracking-tight mb-2">
           Strategic Framework

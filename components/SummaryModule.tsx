@@ -1013,7 +1013,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">
-                Step 4 — Final Output
+                Step 5 — Final Output
               </p>
               <h2 className="text-3xl font-light text-[#161616] tracking-tight">
                 P&G Pink Brief

@@ -251,7 +251,7 @@ const InsightsModule: React.FC<Props> = ({
 
               {/* Full Insight Text - Smaller secondary text */}
               <p className="text-sm leading-relaxed mb-4 text-[#525252]">
-                "{item.insight_text}"
+                {item.insight_text}
               </p>
 
               {isBelowThreshold ? (
@@ -321,7 +321,7 @@ const InsightsModule: React.FC<Props> = ({
       {/* Header */}
       <div className="mb-8">
         <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">
-          Step 2
+          Step 3
         </p>
         <h2 className="text-3xl font-light text-[#161616] tracking-tight mb-2">
           Select Insight

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Filter, Loader2, FileText, AlertCircle } from 'lucide-react';
+import { Filter, Loader2, FileText, AlertCircle } from 'lucide-react';
 import { briefService } from '../lib/services/briefService';
 import { productService } from '../lib/services/productService';
 import { isSupabaseConfigured } from '../lib/supabase/client';
@@ -8,6 +8,7 @@ import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
 import type { BriefWithProduct, Product } from '../lib/supabase/types';
 import BriefCard from '../components/BriefCard';
 import ConfirmDialog from '../components/ConfirmDialog';
+import Header from '../components/Header';
 
 const BriefRepository: React.FC = () => {
   const navigate = useNavigate();
@@ -112,18 +113,7 @@ const BriefRepository: React.FC = () => {
   if (!isSupabaseConfigured()) {
     return (
       <div className="min-h-screen bg-[#f4f4f4]">
-        {/* Header */}
-        <header className="h-12 bg-[#161616] flex items-center px-4">
-          <button
-            onClick={() => navigate('/')}
-            className="text-white text-sm font-medium tracking-tight hover:text-[#a8a8a8] transition-colors flex items-center gap-2"
-          >
-            <ArrowLeft size={16} />
-            Back
-          </button>
-          <span className="mx-3 text-[#525252]">/</span>
-          <span className="text-[#c6c6c6] text-sm">Brief Repository</span>
-        </header>
+        <Header breadcrumbs={[{ label: 'Brief Repository' }]} />
 
         <main className="max-w-5xl mx-auto p-8">
           <div className="p-6 bg-[#fff8e1] border-l-4 border-[#f9a825]">
@@ -139,18 +129,7 @@ const BriefRepository: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f4f4f4]">
-      {/* Header */}
-      <header className="h-12 bg-[#161616] flex items-center px-4">
-        <button
-          onClick={() => navigate('/')}
-          className="text-white text-sm font-medium tracking-tight hover:text-[#a8a8a8] transition-colors flex items-center gap-2"
-        >
-          <ArrowLeft size={16} />
-          Back
-        </button>
-        <span className="mx-3 text-[#525252]">/</span>
-        <span className="text-[#c6c6c6] text-sm">Brief Repository</span>
-      </header>
+      <Header breadcrumbs={[{ label: 'Brief Repository' }]} />
 
       <main className="max-w-5xl mx-auto p-8">
         {/* Page Header */}
