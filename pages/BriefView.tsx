@@ -24,15 +24,14 @@ const tabs: { id: TabId; label: string; icon: React.ElementType }[] = [
 const BriefView: React.FC = () => {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const { loadBrief: loadBriefToStore } = useBriefFlowStore();
   const [brief, setBrief] = useState<Brief | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [linkCopied, setLinkCopied] = useState(false);
-  const [isLoadingForEdit, setIsLoadingForEdit] = useState(false);
   const [activeTab, setActiveTab] = useState<TabId>('brief');
-  const [strategyEdited, setStrategyEdited] = useState(false);
   const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
+  const [isDuplicatingForInsight, setIsDuplicatingForInsight] = useState(false);
+  const [isGeneratingNewStrategy, setIsGeneratingNewStrategy] = useState(false);
   const [isRegenerating, setIsRegenerating] = useState(false);
 
   const copyLink = async () => {
@@ -42,18 +41,10 @@ const BriefView: React.FC = () => {
     setTimeout(() => setLinkCopied(false), 2000);
   };
 
-  const handleContinueEditing = async () => {
+  const handleContinueEditing = () => {
     if (!id) return;
-    setIsLoadingForEdit(true);
-    try {
-      await loadBriefToStore(id);
-      navigate('/new');
-    } catch (err) {
-      console.error('Failed to load brief for editing:', err);
-      setError('Failed to load brief for editing');
-    } finally {
-      setIsLoadingForEdit(false);
-    }
+    // Navigate to /new/:id - BriefFlow will load the brief from the URL param
+    navigate(`/new/${id}`);
   };
 
   useEffect(() => {
@@ -71,6 +62,13 @@ const BriefView: React.FC = () => {
 
     loadBrief(id);
   }, [id]);
+
+  // Redirect drafts without pink_brief to BriefFlow for editing
+  useEffect(() => {
+    if (brief && !brief.pink_brief && brief.status !== 'complete') {
+      navigate(`/new/${id}`, { replace: true });
+    }
+  }, [brief, id, navigate]);
 
   const loadBrief = async (briefId: string) => {
     setIsLoading(true);
@@ -93,9 +91,6 @@ const BriefView: React.FC = () => {
   // Handle strategy updates
   const handleStrategyUpdate = async (data: { redThreadEssence?: string; redThreadUnlock?: string; sections?: StrategicSection[] }) => {
     if (!brief || !id) return;
-
-    // Mark that strategy was edited (so we can prompt for regeneration)
-    setStrategyEdited(true);
 
     // Update local state
     const updatedMarketingSummary = {
@@ -120,22 +115,71 @@ const BriefView: React.FC = () => {
     }
   };
 
-  // Handle tab change with strategy edit check
+  // Handle tab change
   const handleTabChange = (tab: TabId) => {
-    // If switching to Brief tab and strategy was edited, ask about regeneration
-    if (tab === 'brief' && strategyEdited && brief?.pink_brief) {
+    setActiveTab(tab);
+  };
+
+  // Handle explicit regeneration request from Strategy viewer
+  const handleRequestRegenerate = () => {
+    if (brief?.pink_brief) {
       setShowRegenerateDialog(true);
-    } else {
-      setActiveTab(tab);
     }
   };
 
   // Handle regeneration confirmation
   const handleConfirmRegenerate = async () => {
     setShowRegenerateDialog(false);
-    setStrategyEdited(false);
+    setIsRegenerating(true);
     // Clear the pink brief to trigger regeneration in SummaryModule
     if (brief && id) {
+      // Debug: Log brief data before syncing
+      console.log('[BriefView] handleConfirmRegenerate - brief data:', {
+        hasInsightsData: !!brief.insights_data,
+        insightsCount: brief.insights_data?.insights?.length,
+        selectedInsightId: brief.selected_insight_id,
+        categoryContext: brief.insights_data?.category_context,
+      });
+
+      // Sync insight data to store so SummaryModule's fallback can access it
+      const store = useBriefFlowStore.getState();
+      if (brief.insights_data?.insights && brief.insights_data.insights.length > 0) {
+        const insights = brief.insights_data.insights;
+
+        // Ensure all insights have an id (use index+1 as fallback)
+        const insightsWithIds = insights.map((insight, index) => ({
+          ...insight,
+          id: insight.id ?? (index + 1),
+        }));
+
+        const firstInsight = insightsWithIds[0];
+
+        // Use selected_insight_id if available, otherwise fall back to first insight's id
+        const selectedId = brief.selected_insight_id ?? firstInsight.id;
+
+        console.log('[BriefView] Syncing insights to store:', {
+          insightsCount: insightsWithIds.length,
+          selectedId,
+          usedFallback: brief.selected_insight_id == null,
+          firstInsightId: firstInsight.id,
+          firstInsightHadId: insights[0]?.id != null,
+        });
+
+        store.setInsightsData(
+          brief.insights_data.category_context || '',
+          insightsWithIds
+        );
+
+        store.selectInsight(selectedId);
+
+        console.log('[BriefView] Store after sync:', {
+          insights: useBriefFlowStore.getState().insights?.length,
+          selectedInsightId: useBriefFlowStore.getState().selectedInsightId,
+        });
+      } else {
+        console.warn('[BriefView] Could not sync - no insights data');
+      }
+
       setBrief(prev => prev ? { ...prev, pink_brief: null } : null);
       try {
         await briefService.update(id, { pink_brief: null, status: 'draft' });
@@ -149,8 +193,57 @@ const BriefView: React.FC = () => {
   // Handle skip regeneration
   const handleSkipRegenerate = () => {
     setShowRegenerateDialog(false);
-    setStrategyEdited(false);
-    setActiveTab('brief');
+  };
+
+  // Handle selecting a different insight - duplicates the brief with new insight
+  const handleSelectDifferentInsight = async (newInsightId: number) => {
+    if (!id || !brief) return;
+
+    setIsDuplicatingForInsight(true);
+    try {
+      // Duplicate the brief
+      const newBrief = await briefService.duplicate(id);
+
+      // Update the duplicated brief with the new insight selection (clears downstream data)
+      await briefService.update(newBrief.id, {
+        selected_insight_id: newInsightId,
+        marketing_summary: null, // Clear strategy - needs regeneration
+        pink_brief: null, // Clear brief - needs regeneration
+        status: 'draft',
+      });
+
+      // Navigate to the new brief in edit mode
+      navigate(`/brief/${newBrief.id}`);
+    } catch (err) {
+      console.error('Failed to create new version with different insight:', err);
+    } finally {
+      setIsDuplicatingForInsight(false);
+    }
+  };
+
+  // Handle generating a new strategy from Insights screen - duplicates and clears strategy + brief
+  const handleGenerateNewStrategy = async () => {
+    if (!id || !brief) return;
+
+    setIsGeneratingNewStrategy(true);
+    try {
+      // Duplicate the brief
+      const newBrief = await briefService.duplicate(id);
+
+      // Clear strategy and brief to trigger regeneration
+      await briefService.update(newBrief.id, {
+        marketing_summary: null,
+        pink_brief: null,
+        status: 'draft',
+      });
+
+      // Navigate to the new brief
+      navigate(`/brief/${newBrief.id}`);
+    } catch (err) {
+      console.error('Failed to create new strategy version:', err);
+    } finally {
+      setIsGeneratingNewStrategy(false);
+    }
   };
 
   // Convert DB brief to BriefData format for SummaryModule
@@ -164,14 +257,39 @@ const BriefView: React.FC = () => {
       execution: dbBrief.pink_brief.execution,
     } : null;
 
-    const selectedInsight: ExtractedInsight | null = dbBrief.insights_data?.insights && dbBrief.selected_insight_id !== null
-      ? dbBrief.insights_data.insights.find(i => i.id === dbBrief.selected_insight_id) as ExtractedInsight || null
-      : null;
+    // Ensure insights have IDs (use index+1 as fallback for old data)
+    const insightsWithIds = (dbBrief.insights_data?.insights || []).map((insight, index) => ({
+      ...insight,
+      id: insight.id ?? (index + 1),
+    })) as ExtractedInsight[];
+
+    // Debug logging
+    console.log('[convertToBriefData] Input:', {
+      hasInsightsData: !!dbBrief.insights_data,
+      insightsCount: insightsWithIds.length,
+      selectedInsightId: dbBrief.selected_insight_id,
+      hasPinkBrief: !!dbBrief.pink_brief,
+    });
+
+    // Find selected insight - try by ID first, then fall back to first insight
+    let selectedInsight: ExtractedInsight | null = null;
+    if (insightsWithIds.length > 0) {
+      if (dbBrief.selected_insight_id != null) {
+        selectedInsight = insightsWithIds.find(i => Number(i.id) === Number(dbBrief.selected_insight_id)) || null;
+      }
+      // If no selected_insight_id or not found, fall back to first insight
+      if (!selectedInsight) {
+        selectedInsight = insightsWithIds[0];
+        console.log('[convertToBriefData] Using first insight as fallback, id:', selectedInsight.id);
+      }
+    }
+
+    console.log('[convertToBriefData] selectedInsight:', selectedInsight ? `found (id=${selectedInsight.id})` : 'null');
 
     return {
       ...INITIAL_BRIEF_DATA,
       researchText: dbBrief.source_documents?.[0]?.raw_text || '',
-      extractedInsights: (dbBrief.insights_data?.insights || []) as ExtractedInsight[],
+      extractedInsights: insightsWithIds,
       categoryContext: dbBrief.insights_data?.category_context || '',
       selectedInsight,
       marketingSummarySections: dbBrief.marketing_summary?.sections || [],
@@ -219,8 +337,8 @@ const BriefView: React.FC = () => {
 
   const briefData = convertToBriefData(brief);
 
-  // If brief has pink_brief content OR is marked complete, show the tabbed view
-  if (brief.pink_brief || brief.status === 'complete') {
+  // If brief has pink_brief content OR is marked complete OR we're regenerating, show the tabbed view
+  if (brief.pink_brief || brief.status === 'complete' || isRegenerating) {
     return (
       <div className="min-h-screen flex flex-col bg-[#f4f4f4]">
         <header className="h-12 bg-[#161616] flex items-center justify-between px-4 shrink-0">
@@ -279,6 +397,11 @@ const BriefView: React.FC = () => {
               insights={briefData.extractedInsights}
               selectedInsightId={brief.selected_insight_id}
               categoryContext={briefData.categoryContext}
+              onSelectDifferentInsight={brief.status === 'complete' ? handleSelectDifferentInsight : undefined}
+              isSelectingInsight={isDuplicatingForInsight}
+              hasStrategy={!!brief.marketing_summary}
+              onGenerateNewStrategy={brief.status === 'complete' ? handleGenerateNewStrategy : undefined}
+              isGeneratingStrategy={isGeneratingNewStrategy}
             />
           )}
           {activeTab === 'strategy' && (
@@ -287,6 +410,8 @@ const BriefView: React.FC = () => {
               redThreadUnlock={brief.marketing_summary?.red_thread_unlock || ''}
               sections={brief.marketing_summary?.sections || []}
               onUpdate={handleStrategyUpdate}
+              hasBrief={!!brief.pink_brief}
+              onRequestRegenerate={handleRequestRegenerate}
             />
           )}
           {activeTab === 'brief' && (
@@ -317,48 +442,9 @@ const BriefView: React.FC = () => {
     );
   }
 
-  // If it's a draft without pink_brief, redirect to continue editing
-  // For now, show a simple view
-  return (
-    <div className="min-h-screen bg-[#f4f4f4]">
-      <header className="h-12 bg-[#161616] flex items-center px-4">
-        <button
-          onClick={() => navigate('/briefs')}
-          className="text-white text-sm font-medium tracking-tight hover:text-[#a8a8a8] transition-colors flex items-center gap-2"
-        >
-          <ArrowLeft size={16} />
-          Back to Repository
-        </button>
-        <span className="mx-3 text-[#525252]">/</span>
-        <span className="text-[#c6c6c6] text-sm">{brief.title}</span>
-      </header>
-
-      <main className="max-w-5xl mx-auto p-8">
-        <div className="p-6 bg-white border border-[#e0e0e0]">
-          <h2 className="text-xl font-light text-[#161616] mb-4">{brief.title}</h2>
-          <p className="text-sm text-[#6f6f6f] mb-6">
-            This brief is still in draft status. Resume editing to complete it.
-          </p>
-
-          <div className="flex gap-4">
-            <button
-              onClick={handleContinueEditing}
-              disabled={isLoadingForEdit}
-              className="h-10 px-4 bg-[#0f62fe] text-white text-sm font-medium hover:bg-[#0353e9] transition-colors disabled:opacity-50"
-            >
-              {isLoadingForEdit ? 'Loading...' : 'Continue Editing'}
-            </button>
-            <button
-              onClick={() => navigate('/briefs')}
-              className="h-10 px-4 text-[#525252] text-sm font-medium hover:bg-[#f4f4f4] transition-colors"
-            >
-              Back to Repository
-            </button>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
+  // This is a fallback return - should not normally be reached
+  // If we get here, it means brief exists but doesn't match any condition above
+  return null;
 };
 
 export default BriefView;

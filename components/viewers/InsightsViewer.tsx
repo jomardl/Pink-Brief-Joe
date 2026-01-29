@@ -9,7 +9,10 @@ import {
   Heart,
   Users,
   User,
-  Check
+  Check,
+  Copy,
+  RefreshCw,
+  Target
 } from 'lucide-react';
 import type { ExtractedInsight, TensionType } from '../../types';
 
@@ -17,6 +20,11 @@ interface Props {
   insights: ExtractedInsight[];
   selectedInsightId: number | null;
   categoryContext: string;
+  onSelectDifferentInsight?: (insightId: number) => void; // For saved briefs - triggers duplication
+  isSelectingInsight?: boolean; // Shows loading state during duplication
+  hasStrategy?: boolean; // Whether a marketing strategy exists
+  onGenerateNewStrategy?: () => void; // Called when user wants to regenerate strategy for current insight
+  isGeneratingStrategy?: boolean; // Shows loading state during strategy generation
 }
 
 const tensionTypeConfig: Record<TensionType, { icon: React.ElementType; label: string; color: string }> = {
@@ -26,8 +34,18 @@ const tensionTypeConfig: Record<TensionType, { icon: React.ElementType; label: s
   identity: { icon: User, label: 'Identity', color: 'bg-amber-100 text-amber-700' }
 };
 
-const InsightsViewer: React.FC<Props> = ({ insights, selectedInsightId, categoryContext }) => {
+const InsightsViewer: React.FC<Props> = ({
+  insights,
+  selectedInsightId,
+  categoryContext,
+  onSelectDifferentInsight,
+  isSelectingInsight = false,
+  hasStrategy = false,
+  onGenerateNewStrategy,
+  isGeneratingStrategy = false
+}) => {
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [selectingId, setSelectingId] = useState<number | null>(null);
 
   if (insights.length === 0) {
     return (
@@ -50,6 +68,13 @@ const InsightsViewer: React.FC<Props> = ({ insights, selectedInsightId, category
       next.add(id);
     }
     setExpandedIds(next);
+  };
+
+  const handleSelectInsight = (id: number) => {
+    if (onSelectDifferentInsight && !isSelectingInsight) {
+      setSelectingId(id);
+      onSelectDifferentInsight(id);
+    }
   };
 
   return (
@@ -111,13 +136,28 @@ const InsightsViewer: React.FC<Props> = ({ insights, selectedInsightId, category
                     </div>
                   </div>
 
-                  {isSelected && (
+                  {isSelected ? (
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-medium text-[#0f62fe]">Selected</span>
                       <div className="w-6 h-6 bg-[#0f62fe] flex items-center justify-center">
                         <Check size={14} className="text-white" />
                       </div>
                     </div>
+                  ) : onSelectDifferentInsight && (
+                    <button
+                      onClick={() => handleSelectInsight(insight.id)}
+                      disabled={isSelectingInsight}
+                      className="h-8 px-3 bg-[#6929c4] text-white text-xs font-medium flex items-center gap-1.5 hover:bg-[#491d8b] transition-colors disabled:bg-[#c6c6c6]"
+                    >
+                      {isSelectingInsight && selectingId === insight.id ? (
+                        <span className="animate-pulse">Creating new version...</span>
+                      ) : (
+                        <>
+                          <Copy size={12} />
+                          Use This Insight
+                        </>
+                      )}
+                    </button>
                   )}
                 </div>
 
@@ -185,6 +225,24 @@ const InsightsViewer: React.FC<Props> = ({ insights, selectedInsightId, category
           );
         })}
       </div>
+
+      {/* Generate New Strategy button - shown when strategy exists */}
+      {hasStrategy && onGenerateNewStrategy && (
+        <div className="mt-8 flex justify-end">
+          <button
+            onClick={onGenerateNewStrategy}
+            disabled={isGeneratingStrategy}
+            className="h-10 px-4 bg-[#6929c4] text-white text-sm font-medium flex items-center gap-2 hover:bg-[#491d8b] transition-colors disabled:bg-[#c6c6c6]"
+          >
+            {isGeneratingStrategy ? (
+              <RefreshCw size={16} className="animate-spin" />
+            ) : (
+              <Target size={16} />
+            )}
+            Generate New Strategy
+          </button>
+        </div>
+      )}
     </div>
   );
 };

@@ -4,7 +4,7 @@ import type { BriefWithProduct } from '../lib/supabase/types';
 
 interface Props {
   brief: BriefWithProduct;
-  onOpen: (id: string) => void;
+  onOpen: (id: string, status: string) => void;
   onDuplicate: (id: string) => void;
   onArchive: (id: string) => void;
 }
@@ -108,7 +108,7 @@ const BriefCard: React.FC<Props> = ({ brief, onOpen, onDuplicate, onArchive }) =
       {/* Actions */}
       <div className="border-t border-[#e0e0e0] px-5 py-3 flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
         <button
-          onClick={() => onOpen(brief.id)}
+          onClick={() => onOpen(brief.id, brief.status)}
           className="h-8 px-3 bg-[#0f62fe] text-white text-xs font-medium hover:bg-[#0353e9] transition-colors"
         >
           {brief.status === 'draft' ? 'Continue Editing' : 'View'}

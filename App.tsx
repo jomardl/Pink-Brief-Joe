@@ -11,6 +11,7 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/new" element={<BriefFlow />} />
+        <Route path="/new/:id" element={<BriefFlow />} />
         <Route path="/briefs" element={<BriefRepository />} />
         <Route path="/brief/:id" element={<BriefView />} />
       </Routes>

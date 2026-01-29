@@ -11,7 +11,7 @@ interface AIProviderState {
 export const useAIProviderStore = create<AIProviderState>()(
   persist(
     (set) => ({
-      provider: 'gemini', // Default to Gemini
+      provider: 'claude', // Default to Claude
       setProvider: (provider) => set({ provider }),
     }),
     {

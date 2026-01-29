@@ -175,23 +175,68 @@ export const useBriefFlowStore = create<BriefFlowState>()(
 
       saveDraft: async () => {
         const state = get();
-        if (!state.briefId) return;
+        console.log('[Store] saveDraft called - state:', {
+          briefId: state.briefId,
+          selectedInsightId: state.selectedInsightId,
+          insightsCount: state.insights.length,
+          hasRawText: !!state.rawDocumentText,
+        });
+
+        if (!state.briefId) {
+          console.log('[Store] saveDraft skipped: no briefId');
+          return;
+        }
+
+        // Don't save if the store hasn't been properly loaded (would overwrite DB with nulls)
+        // At minimum, we need rawDocumentText to indicate data was loaded
+        const hasLoadedData = state.rawDocumentText || state.insights.length > 0 ||
+                              state.marketingSummary || state.pinkBrief;
+        if (!hasLoadedData) {
+          console.warn('[Store] saveDraft skipped: store has no loaded data');
+          return;
+        }
 
         set({ isSaving: true });
 
         try {
-          await briefService.update(state.briefId, {
-            source_documents: state.sourceDocuments,
-            insights_data: state.insights.length > 0 ? {
+          // Only include fields that have actual data to avoid overwriting with nulls
+          const updateData: Record<string, any> = {};
+
+          if (state.sourceDocuments.length > 0) {
+            updateData.source_documents = state.sourceDocuments;
+          }
+
+          if (state.insights.length > 0) {
+            updateData.insights_data = {
               extraction_timestamp: new Date().toISOString(),
               model_used: useAIProviderStore.getState().provider === 'claude' ? 'claude-sonnet-4' : 'gemini-2.0-flash',
               category_context: state.categoryContext,
               insights: state.insights,
-            } : null,
-            selected_insight_id: state.selectedInsightId,
-            marketing_summary: state.marketingSummary,
-            pink_brief: state.pinkBrief,
-          });
+            };
+            // Only save selected_insight_id if it's actually set - don't overwrite DB with null
+            if (state.selectedInsightId !== null) {
+              updateData.selected_insight_id = state.selectedInsightId;
+            }
+          }
+
+          // ALSO save selected_insight_id independently if set (in case insights weren't loaded)
+          if (state.selectedInsightId !== null && !updateData.selected_insight_id) {
+            updateData.selected_insight_id = state.selectedInsightId;
+          }
+
+          if (state.marketingSummary) {
+            updateData.marketing_summary = state.marketingSummary;
+          }
+
+          if (state.pinkBrief) {
+            updateData.pink_brief = state.pinkBrief;
+          }
+
+          // Only update if we have something to save
+          console.log('[Store] saveDraft updating with:', Object.keys(updateData));
+          if (Object.keys(updateData).length > 0) {
+            await briefService.update(state.briefId, updateData);
+          }
 
           set({
             isSaving: false,
@@ -210,13 +255,36 @@ export const useBriefFlowStore = create<BriefFlowState>()(
         set({ isSaving: true });
 
         try {
-          await briefService.update(state.briefId, {
+          // Build complete update with all essential data
+          const updateData: Record<string, any> = {
             status: 'complete',
             pink_brief: state.pinkBrief ? {
               ...state.pinkBrief,
               last_edited: new Date().toISOString(),
             } : null,
-          });
+          };
+
+          // Ensure selected_insight_id is saved (critical for regeneration)
+          if (state.selectedInsightId !== null) {
+            updateData.selected_insight_id = state.selectedInsightId;
+          }
+
+          // Ensure insights_data is saved if available
+          if (state.insights.length > 0) {
+            updateData.insights_data = {
+              extraction_timestamp: new Date().toISOString(),
+              model_used: useAIProviderStore.getState().provider === 'claude' ? 'claude-sonnet-4' : 'gemini-2.0-flash',
+              category_context: state.categoryContext,
+              insights: state.insights,
+            };
+          }
+
+          // Ensure marketing_summary is saved if available
+          if (state.marketingSummary) {
+            updateData.marketing_summary = state.marketingSummary;
+          }
+
+          await briefService.update(state.briefId, updateData);
 
           set({
             isSaving: false,
@@ -244,8 +312,15 @@ export const useBriefFlowStore = create<BriefFlowState>()(
       },
 
       selectInsight: (insightId) => {
+        console.log('[Store] selectInsight called with:', insightId);
         set({ selectedInsightId: insightId });
         // Auto-save after setting
+        const state = get();
+        console.log('[Store] After selectInsight - state:', {
+          briefId: state.briefId,
+          selectedInsightId: state.selectedInsightId,
+          insightsCount: state.insights.length,
+        });
         get().saveDraft().catch(console.error);
       },
 

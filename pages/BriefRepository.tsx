@@ -52,8 +52,14 @@ const BriefRepository: React.FC = () => {
     }
   };
 
-  const handleOpen = (id: string) => {
-    navigate(`/brief/${id}`);
+  const handleOpen = (id: string, status: string) => {
+    // Drafts go directly to BriefFlow for editing
+    // Completed briefs go to BriefView for viewing
+    if (status === 'draft') {
+      navigate(`/new/${id}`);
+    } else {
+      navigate(`/brief/${id}`);
+    }
   };
 
   const handleDuplicate = async (id: string) => {
@@ -230,7 +236,7 @@ const BriefRepository: React.FC = () => {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="flex flex-col gap-4">
             {sortedBriefs.map((brief) => (
               <BriefCard
                 key={brief.id}

@@ -1,6 +1,13 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { ExtractedInsight, PinkBriefContent, InsightExtractionResult } from "./types";
+import { ExtractedInsight, PinkBriefContent, InsightExtractionResult, StrategicSection } from "./types";
+
+// Strategy context for Pink Brief generation
+export interface StrategyContext {
+  redThreadEssence: string;
+  redThreadUnlock: string;
+  sections: StrategicSection[];
+}
 
 // ============================================
 // PROMPTS
@@ -51,9 +58,21 @@ Return valid JSON only.
 `;
 
 const PINK_BRIEF_GENERATION_INSTRUCTIONS = `
-You are a P&G Brand Strategy Director. Generate a Pink Brief based on the provided consumer insight and research.
+You are a P&G Brand Strategy Director. Generate a Pink Brief based on the provided consumer insight, strategic framework, and research.
 
-CRITICAL: Write REAL, SPECIFIC content derived from the research. Study this REAL EXAMPLE:
+CRITICAL:
+- The "Red Thread" is the strategic north star - ensure all brief sections ladder back to it
+- Use the Strategic Direction to inform each corresponding brief section
+- Write REAL, SPECIFIC content derived from the research
+
+## STRATEGY → BRIEF MAPPING
+- Business Landscape → informs Business Objective
+- Behavioral Deep-Dive → informs Consumer Problem
+- Strategic Tension → informs Communication Challenge
+- Brand's Right to Win → informs Message Strategy
+- Creative Direction → informs Execution
+
+Study this REAL EXAMPLE:
 
 ## REAL P&G PINK BRIEF EXAMPLE
 
@@ -310,13 +329,35 @@ If the hypothesis is NOT supported (score < 5), still return it but explain why 
 export const generatePinkBrief = async (
   insight: ExtractedInsight,
   categoryContext: string,
-  researchText: string
+  researchText: string,
+  strategyContext?: StrategyContext
 ): Promise<PinkBriefContent> => {
   return withRetry(async () => {
     const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY as string });
 
-    const inputContext = `
-SELECTED CONSUMER INSIGHT:
+    // Build strategy section for prompt
+    let strategySection = '';
+    if (strategyContext && (strategyContext.redThreadEssence || strategyContext.sections.length > 0)) {
+      const sectionSummaries = strategyContext.sections
+        .map(s => `• ${s.title}: ${s.summary || s.content.substring(0, 150)}`)
+        .join('\n');
+
+      strategySection = `
+=== STRATEGIC FRAMEWORK (from Deep Dive) ===
+
+RED THREAD:
+Essence: "${strategyContext.redThreadEssence || '(not specified)'}"
+Unlock: "${strategyContext.redThreadUnlock || '(not specified)'}"
+
+STRATEGIC DIRECTION:
+${sectionSummaries || '(no sections provided)'}
+
+===========================================
+
+`;
+    }
+
+    const inputContext = `${strategySection}SELECTED CONSUMER INSIGHT:
 ${insight.insight_text}
 
 SUPPORTING VERBATIMS:

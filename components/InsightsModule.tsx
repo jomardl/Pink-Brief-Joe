@@ -169,7 +169,7 @@ const InsightsModule: React.FC<Props> = ({
           isSelected
             ? 'border-[#0f62fe] ring-2 ring-[#0f62fe] ring-opacity-20'
             : isBelowThreshold
-            ? 'border-[#e0e0e0] opacity-50'
+            ? 'border-[#da1e28]'
             : 'border-[#e0e0e0] hover:border-[#8d8d8d]'
         }`}
       >
@@ -244,13 +244,13 @@ const InsightsModule: React.FC<Props> = ({
             <div>
               {/* Insight Headline - Large prominent text */}
               {item.insight_headline && (
-                <h3 className={`text-xl font-semibold mb-3 ${isBelowThreshold ? 'text-[#a8a8a8]' : 'text-[#161616]'}`}>
+                <h3 className="text-xl font-semibold mb-3 text-[#161616]">
                   {item.insight_headline}
                 </h3>
               )}
 
               {/* Full Insight Text - Smaller secondary text */}
-              <p className={`text-sm leading-relaxed mb-4 ${isBelowThreshold ? 'text-[#a8a8a8]' : 'text-[#525252]'}`}>
+              <p className="text-sm leading-relaxed mb-4 text-[#525252]">
                 "{item.insight_text}"
               </p>
 

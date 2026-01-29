@@ -1,7 +1,8 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Download, Printer, Loader2, RotateCcw, Edit2, X, ChevronDown, FileText, File, Save, Trash2, Check, Cpu } from 'lucide-react';
-import { generatePinkBrief } from '../aiService';
+import { useNavigate } from 'react-router-dom';
+import { Download, Printer, Loader2, RotateCcw, Edit2, X, ChevronDown, FileText, File, Save, Trash2, Check, Cpu, RefreshCw } from 'lucide-react';
+import { generatePinkBrief, StrategyContext } from '../aiService';
 import { BriefData, PinkBriefContent } from '../types';
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle, AlignmentType } from 'docx';
 import { saveAs } from 'file-saver';
@@ -54,20 +55,68 @@ const FieldRow = ({
 );
 
 const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAlreadySaved = false, storedModelUsed }) => {
-  const [content, setContent] = useState<PinkBriefContent | null>(briefData.pinkBrief);
+  const navigate = useNavigate();
+
+  const dbConfigured = isSupabaseConfigured();
+  const {
+    briefId,
+    completeBrief,
+    setPinkBrief,
+    reset: resetStore,
+    sourceDocuments,
+    marketingSummary,
+    pinkBrief: storePinkBrief,
+    insights: storeInsights,
+    selectedInsightId: storeSelectedInsightId,
+  } = useBriefFlowStore();
+
+  // Get pinkBrief from props OR store (fallback for when sync didn't complete)
+  // IMPORTANT: Only use store fallback when briefData.pinkBrief is undefined (not provided)
+  // If it's explicitly null, that means regeneration was requested - don't fall back to store
+  const effectivePinkBrief = briefData.pinkBrief !== undefined
+    ? briefData.pinkBrief
+    : (storePinkBrief ? {
+        business_objective: storePinkBrief.business_objective,
+        consumer_problem: storePinkBrief.consumer_problem,
+        communication_challenge: storePinkBrief.communication_challenge,
+        message_strategy: storePinkBrief.message_strategy,
+        insights: storePinkBrief.insights,
+        execution: storePinkBrief.execution,
+      } : null);
+
+  // Get selectedInsight from props OR derive from store (fallback)
+  const effectiveSelectedInsight = briefData.selectedInsight || (() => {
+    if (storeSelectedInsightId != null && storeInsights.length > 0) {
+      const found = storeInsights.find(i => Number(i.id) === Number(storeSelectedInsightId));
+      if (found) {
+        return {
+          id: found.id,
+          insight_headline: found.insight_headline,
+          insight_text: found.insight_text,
+          verbatims: found.verbatims,
+          relevance_score: found.relevance_score,
+          tension_type: found.tension_type,
+          jtbd: found.jtbd,
+        };
+      }
+    }
+    return null;
+  })();
+
+  const [content, setContent] = useState<PinkBriefContent | null>(effectivePinkBrief);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [originalContent, setOriginalContent] = useState<PinkBriefContent | null>(null);
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isSavingBrief, setIsSavingBrief] = useState(false);
   const [showDiscardDialog, setShowDiscardDialog] = useState(false);
+  const [showRegenerateDialog, setShowRegenerateDialog] = useState(false);
   const [showSaveSuccess, setShowSaveSuccess] = useState(false);
+  const [hasSavedThisSession, setHasSavedThisSession] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
   const exportMenuRef = useRef<HTMLDivElement>(null);
-
-  const dbConfigured = isSupabaseConfigured();
-  const { briefId, completeBrief, setPinkBrief, reset: resetStore, sourceDocuments } = useBriefFlowStore();
 
   // Get source filename from store or briefData
   const sourceFilename = sourceDocuments?.[0]?.filename || null;
@@ -78,10 +127,16 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
     ? (storedModelUsed.includes('claude') ? 'claude' : 'gemini')
     : currentProvider;
 
+  // Sync content when pinkBrief changes (from props or store)
+  useEffect(() => {
+    setContent(effectivePinkBrief);
+  }, [effectivePinkBrief]);
+
   const TIMEOUT_MS = 90000; // 90 seconds
 
   const runGeneration = async () => {
-    if (!briefData.selectedInsight) return;
+    // Use effective insight (from props or store fallback)
+    if (!effectiveSelectedInsight) return;
 
     setIsLoading(true);
     setError(null);
@@ -91,12 +146,24 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
       setTimeout(() => reject(new Error('Generation timed out. Please try again.')), TIMEOUT_MS)
     );
 
+    // Build strategy context from store's marketing summary or briefData
+    const strategyContext: StrategyContext | undefined = marketingSummary ? {
+      redThreadEssence: marketingSummary.red_thread_essence || '',
+      redThreadUnlock: marketingSummary.red_thread_unlock || '',
+      sections: marketingSummary.sections || [],
+    } : briefData.marketingSummarySections.length > 0 ? {
+      redThreadEssence: briefData.redThreadEssence || '',
+      redThreadUnlock: '',
+      sections: briefData.marketingSummarySections,
+    } : undefined;
+
     try {
       const result = await Promise.race([
         generatePinkBrief(
-          briefData.selectedInsight,
+          effectiveSelectedInsight,
           briefData.categoryContext,
-          briefData.researchText
+          briefData.researchText,
+          strategyContext
         ),
         timeoutPromise
       ]);
@@ -114,10 +181,12 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
     }
   };
 
+  // Auto-generate when content is null and we have an insight
   useEffect(() => {
     if (content) return;
+    if (!effectiveSelectedInsight) return;
     runGeneration();
-  }, [briefData.selectedInsight]);
+  }, [effectiveSelectedInsight, content]);
 
   // Close export menu when clicking outside
   useEffect(() => {
@@ -348,6 +417,383 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
     }
   };
 
+  // Export to Word document (Full - includes insights, strategy, and brief)
+  const exportToWordFull = async () => {
+    if (!content) return;
+    setIsExporting(true);
+    setShowExportMenu(false);
+
+    try {
+      const children: any[] = [];
+
+      // Title
+      children.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: "P&G CREATIVE BRIEF PACKAGE", bold: true, size: 48, color: "0f62fe" }),
+          ],
+          spacing: { after: 200 },
+        }),
+        new Paragraph({
+          children: [new TextRun({ text: "CONFIDENTIAL", size: 20, color: "da1e28", italics: true })],
+          spacing: { after: 600 },
+        })
+      );
+
+      // ========== SECTION 1: CONSUMER INSIGHT ==========
+      if (effectiveSelectedInsight) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: "PART 1: CONSUMER INSIGHT", bold: true, size: 32, color: "6929c4" })],
+            spacing: { before: 400, after: 300 },
+          })
+        );
+
+        if (effectiveSelectedInsight.insight_headline) {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Insight Headline: ", bold: true }),
+                new TextRun({ text: effectiveSelectedInsight.insight_headline, size: 28 }),
+              ],
+              spacing: { after: 200 },
+            })
+          );
+        }
+
+        children.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Consumer Voice: ", bold: true }),
+              new TextRun({ text: `"${effectiveSelectedInsight.insight_text}"`, italics: true }),
+            ],
+            spacing: { after: 200 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Tension Type: ", bold: true }),
+              new TextRun(effectiveSelectedInsight.tension_type || 'functional'),
+            ],
+            spacing: { after: 100 },
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Job To Be Done: ", bold: true }),
+              new TextRun(effectiveSelectedInsight.jtbd || ''),
+            ],
+            spacing: { after: 200 },
+          })
+        );
+
+        // Verbatims
+        if (effectiveSelectedInsight.verbatims?.length > 0) {
+          children.push(
+            new Paragraph({
+              text: "Supporting Verbatims:",
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 },
+            })
+          );
+          effectiveSelectedInsight.verbatims.forEach((v, idx) => {
+            children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({ text: `${idx + 1}. `, bold: true }),
+                  new TextRun({ text: `"${v.quote}"`, italics: true }),
+                ],
+                spacing: { after: 100 },
+              })
+            );
+          });
+        }
+
+        children.push(
+          new Paragraph({ text: "", spacing: { after: 400 } }) // Spacer
+        );
+      }
+
+      // ========== SECTION 2: STRATEGIC FRAMEWORK ==========
+      if (marketingSummary) {
+        children.push(
+          new Paragraph({
+            children: [new TextRun({ text: "PART 2: STRATEGIC FRAMEWORK", bold: true, size: 32, color: "6929c4" })],
+            spacing: { before: 400, after: 300 },
+          })
+        );
+
+        // Red Thread
+        if (marketingSummary.red_thread_essence || marketingSummary.red_thread_unlock) {
+          children.push(
+            new Paragraph({
+              text: "THE RED THREAD",
+              heading: HeadingLevel.HEADING_1,
+              spacing: { before: 200, after: 200 },
+            })
+          );
+
+          if (marketingSummary.red_thread_essence) {
+            children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "Strategic Essence: ", bold: true }),
+                  new TextRun({ text: marketingSummary.red_thread_essence, size: 28 }),
+                ],
+                spacing: { after: 100 },
+              })
+            );
+          }
+
+          if (marketingSummary.red_thread_unlock) {
+            children.push(
+              new Paragraph({
+                children: [
+                  new TextRun({ text: "The Unlock: ", bold: true }),
+                  new TextRun(marketingSummary.red_thread_unlock),
+                ],
+                spacing: { after: 300 },
+              })
+            );
+          }
+        }
+
+        // Strategic Sections
+        if (marketingSummary.sections?.length > 0) {
+          marketingSummary.sections.forEach((section) => {
+            children.push(
+              new Paragraph({
+                text: section.title.toUpperCase(),
+                heading: HeadingLevel.HEADING_2,
+                spacing: { before: 300, after: 100 },
+              })
+            );
+
+            if (section.summary) {
+              children.push(
+                new Paragraph({
+                  children: [
+                    new TextRun({ text: "Summary: ", bold: true, color: "0f62fe" }),
+                    new TextRun(section.summary),
+                  ],
+                  spacing: { after: 100 },
+                })
+              );
+            }
+
+            children.push(
+              new Paragraph({
+                children: [new TextRun(section.content)],
+                spacing: { after: 200 },
+              })
+            );
+          });
+        }
+
+        children.push(
+          new Paragraph({ text: "", spacing: { after: 400 } }) // Spacer
+        );
+      }
+
+      // ========== SECTION 3: PINK BRIEF ==========
+      children.push(
+        new Paragraph({
+          children: [new TextRun({ text: "PART 3: PINK BRIEF", bold: true, size: 32, color: "6929c4" })],
+          spacing: { before: 400, after: 300 },
+        }),
+        // Business Objective
+        new Paragraph({
+          text: "WHO-INSPIRED BUSINESS OBJECTIVE",
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 400, after: 200 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "To grow: ", bold: true }),
+            new TextRun(content.business_objective.to_grow),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "We need to get: ", bold: true }),
+            new TextRun(content.business_objective.we_need_to_get),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "To: ", bold: true }),
+            new TextRun(content.business_objective.to),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "By forming the habit of: ", bold: true }),
+            new TextRun(content.business_objective.by_forming_new_habit),
+          ],
+          spacing: { after: 300 },
+        }),
+        // Consumer Problem
+        new Paragraph({
+          text: "CONSUMER'S PROBLEM TO SOLVE",
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 400, after: 200 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Job To Be Done: ", bold: true }),
+            new TextRun(content.consumer_problem.jtbd),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Current Behavior: ", bold: true }),
+            new TextRun(content.consumer_problem.current_behavior),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Struggle: ", bold: true }),
+            new TextRun(content.consumer_problem.struggle),
+          ],
+          spacing: { after: 300 },
+        }),
+        // Communication Challenge
+        new Paragraph({
+          text: "COMMUNICATION CHALLENGE",
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 400, after: 200 },
+        }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: [
+                    new Paragraph({ children: [new TextRun({ text: "FROM", bold: true, color: "da1e28" })] }),
+                    new Paragraph({ children: [new TextRun({ text: content.communication_challenge.from_state, italics: true })] }),
+                  ],
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                }),
+                new TableCell({
+                  children: [
+                    new Paragraph({ children: [new TextRun({ text: "TO", bold: true, color: "24a148" })] }),
+                    new Paragraph({ children: [new TextRun({ text: content.communication_challenge.to_state, italics: true })] }),
+                  ],
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                }),
+              ],
+            }),
+          ],
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Bridge/Analogy: ", bold: true }),
+            new TextRun(content.communication_challenge.analogy_or_device),
+          ],
+          spacing: { before: 200, after: 300 },
+        }),
+        // Message Strategy
+        new Paragraph({
+          text: "COMMUNICATION MESSAGE STRATEGY",
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 400, after: 200 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Benefit: ", bold: true }),
+            new TextRun({ text: content.message_strategy.benefit, size: 28 }),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Reason To Believe: ", bold: true }),
+            new TextRun(content.message_strategy.rtb),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Brand Character: ", bold: true }),
+            new TextRun({ text: content.message_strategy.brand_character, italics: true }),
+          ],
+          spacing: { after: 300 },
+        }),
+        // Insights
+        new Paragraph({
+          text: "CONSUMER INSIGHTS",
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 400, after: 200 },
+        }),
+        ...content.insights.map(insight => new Paragraph({
+          children: [
+            new TextRun({ text: `Insight ${insight.insight_number}: `, bold: true }),
+            new TextRun({ text: `"${insight.insight_text}"`, italics: true }),
+          ],
+          spacing: { after: 150 },
+        })),
+        // Execution
+        new Paragraph({
+          text: "EXECUTION GUIDANCE",
+          heading: HeadingLevel.HEADING_1,
+          spacing: { before: 400, after: 200 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Key Media: ", bold: true }),
+            new TextRun(content.execution.key_media.join(", ")),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Campaign Pillars: ", bold: true }),
+            new TextRun(content.execution.campaign_pillars.join(", ")),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Key Considerations: ", bold: true }),
+            new TextRun(content.execution.key_considerations),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Business Success: ", bold: true }),
+            new TextRun(content.execution.success_measures.business),
+          ],
+          spacing: { after: 100 },
+        }),
+        new Paragraph({
+          children: [
+            new TextRun({ text: "Equity Success: ", bold: true }),
+            new TextRun(content.execution.success_measures.equity),
+          ],
+        })
+      );
+
+      const doc = new Document({
+        sections: [{
+          properties: {},
+          children,
+        }],
+      });
+
+      const blob = await Packer.toBlob(doc);
+      saveAs(blob, "PG-Creative-Brief-Package.docx");
+    } catch (err) {
+      console.error("Word export failed:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   // Export to PDF
   const exportToPDF = async () => {
     if (!content || !contentRef.current) return;
@@ -423,12 +869,30 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
     });
   };
 
-  const toggleEdit = (section: string) => {
-    // If we're closing an edit (currently editing this section), sync to store
-    if (editingSection === section && content) {
+  const startEdit = (section: string) => {
+    // Save original content before editing
+    if (content) {
+      setOriginalContent({ ...content });
+    }
+    setEditingSection(section);
+  };
+
+  const saveEdit = () => {
+    // Sync to store and close edit mode
+    if (content) {
       setPinkBrief(content);
     }
-    setEditingSection(editingSection === section ? null : section);
+    setEditingSection(null);
+    setOriginalContent(null);
+  };
+
+  const cancelEdit = () => {
+    // Restore original content and close edit mode
+    if (originalContent) {
+      setContent(originalContent);
+    }
+    setEditingSection(null);
+    setOriginalContent(null);
   };
 
   const handlePrint = () => {
@@ -449,6 +913,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
       setEditingSection(null);
 
       await completeBrief();
+      setHasSavedThisSession(true);
       setShowSaveSuccess(true);
       setTimeout(() => setShowSaveSuccess(false), 3000);
     } catch (err) {
@@ -469,6 +934,17 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
     }
     resetStore();
     onReset();
+  };
+
+  // Regenerate brief (for drafts)
+  const handleRegenerateBrief = () => {
+    setShowRegenerateDialog(true);
+  };
+
+  const confirmRegenerate = () => {
+    setShowRegenerateDialog(false);
+    setContent(null);
+    runGeneration();
   };
 
   if (isLoading) {
@@ -493,7 +969,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         </div>
         <h3 className="text-2xl font-light text-[#161616] mb-2">Generation failed</h3>
         <p className="text-sm text-[#525252] mb-6">{error}</p>
-        {briefData.selectedInsight && (
+        {effectiveSelectedInsight && (
           <button
             onClick={runGeneration}
             className="h-10 px-6 bg-[#0f62fe] text-white text-sm font-medium hover:bg-[#0353e9] transition-colors"
@@ -513,11 +989,11 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         </div>
         <h3 className="text-2xl font-light text-[#161616] mb-2">Brief content not available</h3>
         <p className="text-sm text-[#525252] mb-6">
-          {briefData.selectedInsight
+          {effectiveSelectedInsight
             ? 'The brief content was not saved. Click below to regenerate it.'
             : 'This brief is missing required data to display.'}
         </p>
-        {briefData.selectedInsight && (
+        {effectiveSelectedInsight && (
           <button
             onClick={runGeneration}
             className="h-10 px-6 bg-[#0f62fe] text-white text-sm font-medium hover:bg-[#0353e9] transition-colors"
@@ -569,12 +1045,29 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         <section className="mb-6 p-6 bg-white border border-[#e0e0e0]">
           <div className="flex items-center justify-between mb-4">
             <SectionHeader title="Who-Inspired Business Objective" />
-            <button
-              onClick={() => toggleEdit('business')}
-              className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
-            >
-              {editingSection === 'business' ? <X size={16} /> : <Edit2 size={16} />}
-            </button>
+            {editingSection === 'business' ? (
+              <div className="flex items-center gap-2 print:hidden">
+                <button
+                  onClick={cancelEdit}
+                  className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => startEdit('business')}
+                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
+              >
+                <Edit2 size={16} />
+              </button>
+            )}
           </div>
           <div className="space-y-1">
             <FieldRow
@@ -608,12 +1101,29 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         <section className="mb-6 p-6 bg-white border border-[#e0e0e0]">
           <div className="flex items-center justify-between mb-4">
             <SectionHeader title="Consumer's Problem to Solve" />
-            <button
-              onClick={() => toggleEdit('consumer')}
-              className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
-            >
-              {editingSection === 'consumer' ? <X size={16} /> : <Edit2 size={16} />}
-            </button>
+            {editingSection === 'consumer' ? (
+              <div className="flex items-center gap-2 print:hidden">
+                <button
+                  onClick={cancelEdit}
+                  className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => startEdit('consumer')}
+                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
+              >
+                <Edit2 size={16} />
+              </button>
+            )}
           </div>
           <div className="space-y-1">
             <FieldRow
@@ -641,12 +1151,29 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         <section className="mb-6 p-6 bg-white border border-[#e0e0e0]">
           <div className="flex items-center justify-between mb-4">
             <SectionHeader title="Communication Challenge" />
-            <button
-              onClick={() => toggleEdit('comm')}
-              className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
-            >
-              {editingSection === 'comm' ? <X size={16} /> : <Edit2 size={16} />}
-            </button>
+            {editingSection === 'comm' ? (
+              <div className="flex items-center gap-2 print:hidden">
+                <button
+                  onClick={cancelEdit}
+                  className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => startEdit('comm')}
+                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
+              >
+                <Edit2 size={16} />
+              </button>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="p-4 bg-[#f4f4f4] border-l-2 border-[#da1e28]">
@@ -695,12 +1222,29 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
               <div className="w-1 h-6 bg-[#0f62fe]" />
               <h3 className="text-sm font-medium uppercase tracking-wider">Communication Message Strategy</h3>
             </div>
-            <button
-              onClick={() => toggleEdit('message')}
-              className="p-2 text-[#a8a8a8] hover:text-white transition-colors print:hidden"
-            >
-              {editingSection === 'message' ? <X size={16} /> : <Edit2 size={16} />}
-            </button>
+            {editingSection === 'message' ? (
+              <div className="flex items-center gap-2 print:hidden">
+                <button
+                  onClick={cancelEdit}
+                  className="px-3 py-1.5 text-xs text-[#a8a8a8] hover:text-white hover:bg-[#393939] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => startEdit('message')}
+                className="p-2 text-[#a8a8a8] hover:text-white transition-colors print:hidden"
+              >
+                <Edit2 size={16} />
+              </button>
+            )}
           </div>
           <div className="space-y-4">
             <div>
@@ -746,12 +1290,29 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         <section className="mb-6 p-6 bg-white border border-[#e0e0e0]">
           <div className="flex items-center justify-between mb-4">
             <SectionHeader title="Consumer Insights" />
-            <button
-              onClick={() => toggleEdit('insights')}
-              className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
-            >
-              {editingSection === 'insights' ? <X size={16} /> : <Edit2 size={16} />}
-            </button>
+            {editingSection === 'insights' ? (
+              <div className="flex items-center gap-2 print:hidden">
+                <button
+                  onClick={cancelEdit}
+                  className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => startEdit('insights')}
+                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
+              >
+                <Edit2 size={16} />
+              </button>
+            )}
           </div>
           <div className="space-y-4">
             {content.insights.map((insight, idx) => (
@@ -777,12 +1338,29 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         <section className="mb-6 p-6 bg-white border border-[#e0e0e0]">
           <div className="flex items-center justify-between mb-4">
             <SectionHeader title="Execution Guidance" />
-            <button
-              onClick={() => toggleEdit('execution')}
-              className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
-            >
-              {editingSection === 'execution' ? <X size={16} /> : <Edit2 size={16} />}
-            </button>
+            {editingSection === 'execution' ? (
+              <div className="flex items-center gap-2 print:hidden">
+                <button
+                  onClick={cancelEdit}
+                  className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveEdit}
+                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => startEdit('execution')}
+                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
+              >
+                <Edit2 size={16} />
+              </button>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4 mb-4">
@@ -897,21 +1475,33 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
       {/* Actions */}
       <div className="flex items-center justify-between pt-6 border-t border-[#e0e0e0] print:hidden">
         <div className="flex gap-3">
-          <button
-            onClick={() => setShowDiscardDialog(true)}
-            className="h-10 px-4 text-[#da1e28] text-sm font-medium flex items-center gap-2 hover:bg-[#fff1f1] transition-colors"
-          >
-            <Trash2 size={14} /> Discard
-          </button>
+          {!isAlreadySaved && (
+            <button
+              onClick={() => setShowDiscardDialog(true)}
+              className="h-10 px-4 text-[#da1e28] text-sm font-medium flex items-center gap-2 hover:bg-[#fff1f1] transition-colors"
+            >
+              <Trash2 size={14} /> Discard
+            </button>
+          )}
           <button
             onClick={onReset}
             className="h-10 px-4 text-[#525252] text-sm font-medium flex items-center gap-2 hover:bg-[#f4f4f4] transition-colors"
           >
-            <RotateCcw size={14} /> Start over
+            <RotateCcw size={14} /> {isAlreadySaved ? 'Back to Repository' : 'Start over'}
           </button>
         </div>
 
         <div className="flex gap-3">
+          {/* Regenerate button for drafts */}
+          {!isAlreadySaved && effectiveSelectedInsight && (
+            <button
+              onClick={handleRegenerateBrief}
+              className="h-10 px-4 bg-[#f4f4f4] text-[#161616] text-sm font-medium flex items-center gap-2 hover:bg-[#e0e0e0] transition-colors"
+            >
+              <RefreshCw size={14} /> Regenerate
+            </button>
+          )}
+
           <button
             onClick={handlePrint}
             className="h-10 px-4 bg-[#f4f4f4] text-[#161616] text-sm font-medium flex items-center gap-2 hover:bg-[#e0e0e0] transition-colors"
@@ -936,7 +1526,11 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
             </button>
 
             {showExportMenu && (
-              <div className="absolute right-0 mt-1 w-48 bg-white border border-[#e0e0e0] shadow-lg z-10">
+              <div className="absolute right-0 mt-1 w-64 bg-white border border-[#e0e0e0] shadow-lg z-10">
+                {/* Brief Only Section */}
+                <div className="px-3 py-2 bg-[#f4f4f4] border-b border-[#e0e0e0]">
+                  <p className="text-xs font-medium text-[#6f6f6f] uppercase tracking-wider">Brief Only</p>
+                </div>
                 <button
                   onClick={exportToWord}
                   className="w-full px-4 py-3 text-left text-sm text-[#161616] hover:bg-[#f4f4f4] flex items-center gap-3 transition-colors"
@@ -944,17 +1538,32 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
                   <FileText size={16} className="text-[#0f62fe]" />
                   <div>
                     <p className="font-medium">Word Document</p>
-                    <p className="text-xs text-[#6f6f6f]">.docx format</p>
+                    <p className="text-xs text-[#6f6f6f]">Pink Brief only (.docx)</p>
                   </div>
                 </button>
                 <button
                   onClick={exportToPDF}
-                  className="w-full px-4 py-3 text-left text-sm text-[#161616] hover:bg-[#f4f4f4] flex items-center gap-3 border-t border-[#e0e0e0] transition-colors"
+                  className="w-full px-4 py-3 text-left text-sm text-[#161616] hover:bg-[#f4f4f4] flex items-center gap-3 border-b border-[#e0e0e0] transition-colors"
                 >
                   <File size={16} className="text-[#da1e28]" />
                   <div>
                     <p className="font-medium">PDF Document</p>
-                    <p className="text-xs text-[#6f6f6f]">.pdf format</p>
+                    <p className="text-xs text-[#6f6f6f]">Pink Brief only (.pdf)</p>
+                  </div>
+                </button>
+
+                {/* Full Package Section */}
+                <div className="px-3 py-2 bg-[#f4f4f4] border-b border-[#e0e0e0]">
+                  <p className="text-xs font-medium text-[#6f6f6f] uppercase tracking-wider">Full Package</p>
+                </div>
+                <button
+                  onClick={exportToWordFull}
+                  className="w-full px-4 py-3 text-left text-sm text-[#161616] hover:bg-[#f4f4f4] flex items-center gap-3 transition-colors"
+                >
+                  <FileText size={16} className="text-[#6929c4]" />
+                  <div>
+                    <p className="font-medium">Word Document</p>
+                    <p className="text-xs text-[#6f6f6f]">Insight + Strategy + Brief (.docx)</p>
                   </div>
                 </button>
               </div>
@@ -979,7 +1588,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
               ) : (
                 <Save size={14} />
               )}
-              {showSaveSuccess ? 'Saved' : isAlreadySaved ? 'Update Brief' : 'Save Brief'}
+              {showSaveSuccess ? 'Saved' : (isAlreadySaved || hasSavedThisSession) ? 'Update Brief' : 'Save Brief'}
             </button>
           )}
         </div>
@@ -995,6 +1604,18 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         variant="danger"
         onConfirm={handleDiscardBrief}
         onCancel={() => setShowDiscardDialog(false)}
+      />
+
+      {/* Regenerate confirmation dialog */}
+      <ConfirmDialog
+        isOpen={showRegenerateDialog}
+        title="Regenerate Brief"
+        message="This will generate a new Pink Brief using your current insight and strategy. Your current brief content will be replaced."
+        confirmLabel="Regenerate"
+        cancelLabel="Cancel"
+        variant="warning"
+        onConfirm={confirmRegenerate}
+        onCancel={() => setShowRegenerateDialog(false)}
       />
     </div>
   );

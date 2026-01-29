@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ChevronDown, Target, Edit2, X } from 'lucide-react';
+import { ChevronDown, Target, Edit2, X, Check, RefreshCw } from 'lucide-react';
 import type { StrategicSection } from '../../types';
 
 interface Props {
@@ -8,9 +8,18 @@ interface Props {
   redThreadUnlock: string;
   sections: StrategicSection[];
   onUpdate?: (data: { redThreadEssence?: string; redThreadUnlock?: string; sections?: StrategicSection[] }) => void;
+  hasBrief?: boolean; // Whether a pink brief exists
+  onRequestRegenerate?: () => void; // Called when user wants to regenerate brief after edits
 }
 
-const StrategyViewer: React.FC<Props> = ({ redThreadEssence, redThreadUnlock, sections, onUpdate }) => {
+const StrategyViewer: React.FC<Props> = ({
+  redThreadEssence,
+  redThreadUnlock,
+  sections,
+  onUpdate,
+  hasBrief = false,
+  onRequestRegenerate
+}) => {
   const [expandedSection, setExpandedSection] = useState<string | null>(
     sections.length > 0 ? sections[0].id : null
   );
@@ -19,18 +28,59 @@ const StrategyViewer: React.FC<Props> = ({ redThreadEssence, redThreadUnlock, se
   const [localUnlock, setLocalUnlock] = useState(redThreadUnlock);
   const [localSections, setLocalSections] = useState(sections);
 
+  // Track original values for cancel functionality
+  const [originalEssence, setOriginalEssence] = useState(redThreadEssence);
+  const [originalUnlock, setOriginalUnlock] = useState(redThreadUnlock);
+  const [originalSections, setOriginalSections] = useState(sections);
+
+  // Track if strategy has been modified since last brief generation
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Sync with props when they change externally
+  useEffect(() => {
+    setLocalEssence(redThreadEssence);
+    setLocalUnlock(redThreadUnlock);
+    setLocalSections(sections);
+    setOriginalEssence(redThreadEssence);
+    setOriginalUnlock(redThreadUnlock);
+    setOriginalSections(sections);
+  }, [redThreadEssence, redThreadUnlock, sections]);
+
+  const startEdit = (sectionKey: string) => {
+    // Store original values before editing
+    setOriginalEssence(localEssence);
+    setOriginalUnlock(localUnlock);
+    setOriginalSections([...localSections]);
+    setEditingSection(sectionKey);
+  };
+
+  const saveEdit = () => {
+    if (onUpdate) {
+      onUpdate({
+        redThreadEssence: localEssence,
+        redThreadUnlock: localUnlock,
+        sections: localSections,
+      });
+    }
+    setHasUnsavedChanges(true);
+    setEditingSection(null);
+  };
+
+  const cancelEdit = () => {
+    // Restore original values
+    setLocalEssence(originalEssence);
+    setLocalUnlock(originalUnlock);
+    setLocalSections(originalSections);
+    setEditingSection(null);
+  };
+
   const toggleEdit = (sectionKey: string) => {
     if (editingSection === sectionKey) {
-      // Save changes when closing
-      if (onUpdate) {
-        onUpdate({
-          redThreadEssence: localEssence,
-          redThreadUnlock: localUnlock,
-          sections: localSections,
-        });
-      }
+      // Close without saving - user should use Save button
+      cancelEdit();
+    } else {
+      startEdit(sectionKey);
     }
-    setEditingSection(editingSection === sectionKey ? null : sectionKey);
   };
 
   const updateSectionField = (sectionId: string, field: 'title' | 'summary' | 'content', value: string) => {
@@ -64,17 +114,61 @@ const StrategyViewer: React.FC<Props> = ({ redThreadEssence, redThreadUnlock, se
         </h2>
       </div>
 
+      {/* Regenerate Brief Banner - shown when brief exists and strategy has been modified */}
+      {hasBrief && hasUnsavedChanges && onRequestRegenerate && (
+        <div className="mb-6 p-4 bg-[#fff1f1] border border-[#ffb3b8]">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-[#161616]">Strategy has been modified</p>
+              <p className="text-xs text-[#525252]">
+                Would you like to regenerate the Pink Brief based on your changes?
+              </p>
+            </div>
+            <button
+              onClick={onRequestRegenerate}
+              className="h-10 px-4 bg-[#da1e28] text-white text-sm font-medium flex items-center gap-2 hover:bg-[#ba1b23] transition-colors"
+            >
+              <RefreshCw size={16} />
+              Regenerate Brief
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Red Thread Banner */}
       {(redThreadEssence || redThreadUnlock || onUpdate) && (
         <div className="mb-8 relative">
-          {/* Edit button for Red Thread */}
+          {/* Edit controls for Red Thread */}
           {onUpdate && (
-            <button
-              onClick={() => toggleEdit('redThread')}
-              className="absolute right-2 top-2 z-10 p-2 text-[#a8a8a8] hover:text-white hover:bg-[#525252] transition-colors"
-            >
-              {editingSection === 'redThread' ? <X size={16} /> : <Edit2 size={16} />}
-            </button>
+            <div className="absolute right-2 top-2 z-10 flex items-center gap-1">
+              {editingSection === 'redThread' ? (
+                <>
+                  <button
+                    onClick={saveEdit}
+                    className="p-2 text-white bg-[#0f62fe] hover:bg-[#0353e9] transition-colors flex items-center gap-1"
+                    title="Save changes"
+                  >
+                    <Check size={14} />
+                    <span className="text-xs">Save</span>
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    className="p-2 text-[#a8a8a8] hover:text-white hover:bg-[#525252] transition-colors"
+                    title="Cancel"
+                  >
+                    <X size={16} />
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => startEdit('redThread')}
+                  className="p-2 text-[#a8a8a8] hover:text-white hover:bg-[#525252] transition-colors"
+                  title="Edit"
+                >
+                  <Edit2 size={16} />
+                </button>
+              )}
+            </div>
           )}
 
           <div className="grid grid-cols-2 gap-px bg-[#e0e0e0]">
@@ -148,14 +242,37 @@ const StrategyViewer: React.FC<Props> = ({ redThreadEssence, redThreadUnlock, se
                   </motion.div>
                 </button>
 
-                {/* Edit button per section */}
+                {/* Edit controls per section */}
                 {onUpdate && isExpanded && (
-                  <button
-                    onClick={() => toggleEdit(section.id)}
-                    className="p-2 mr-4 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
-                  >
-                    {isEditing ? <X size={16} /> : <Edit2 size={16} />}
-                  </button>
+                  <div className="flex items-center gap-1 mr-4">
+                    {isEditing ? (
+                      <>
+                        <button
+                          onClick={saveEdit}
+                          className="p-2 text-white bg-[#0f62fe] hover:bg-[#0353e9] transition-colors flex items-center gap-1"
+                          title="Save changes"
+                        >
+                          <Check size={14} />
+                          <span className="text-xs">Save</span>
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
+                          title="Cancel"
+                        >
+                          <X size={16} />
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => startEdit(section.id)}
+                        className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
+                        title="Edit"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                    )}
+                  </div>
                 )}
               </div>
 

@@ -43,13 +43,13 @@ const ConfirmDialog: React.FC<Props> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <>
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
           {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-50"
+            className="absolute inset-0 bg-black/50"
             onClick={onCancel}
           />
 
@@ -58,7 +58,7 @@ const ConfirmDialog: React.FC<Props> = ({
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
-            className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-md bg-white shadow-xl z-50"
+            className="relative w-full max-w-md bg-white shadow-xl mx-4"
           >
             {/* Header */}
             <div className="flex items-center justify-between p-4 border-b border-[#e0e0e0]">
@@ -97,7 +97,7 @@ const ConfirmDialog: React.FC<Props> = ({
               </button>
             </div>
           </motion.div>
-        </>
+        </div>
       )}
     </AnimatePresence>
   );

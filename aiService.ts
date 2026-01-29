@@ -4,7 +4,14 @@
 import { useAIProviderStore, type AIProvider } from './lib/stores/aiProviderStore';
 import * as gemini from './geminiService';
 import * as claude from './claudeService';
-import { ExtractedInsight, PinkBriefContent, InsightExtractionResult } from './types';
+import { ExtractedInsight, PinkBriefContent, InsightExtractionResult, StrategicSection } from './types';
+
+// Strategy context for Pink Brief generation
+export interface StrategyContext {
+  redThreadEssence: string;
+  redThreadUnlock: string;
+  sections: StrategicSection[];
+}
 
 // Get current provider from store
 const getProvider = (): AIProvider => {
@@ -46,15 +53,16 @@ export const testBespokeInsight = async (text: string, userInsight: string): Pro
 export const generatePinkBrief = async (
   insight: ExtractedInsight,
   categoryContext: string,
-  researchText: string
+  researchText: string,
+  strategyContext?: StrategyContext
 ): Promise<PinkBriefContent> => {
   const provider = getProvider();
   console.log(`[AI Service] Using ${provider} for Pink Brief generation`);
 
   if (provider === 'claude') {
-    return claude.generatePinkBrief(insight, categoryContext, researchText);
+    return claude.generatePinkBrief(insight, categoryContext, researchText, strategyContext);
   }
-  return gemini.generatePinkBrief(insight, categoryContext, researchText);
+  return gemini.generatePinkBrief(insight, categoryContext, researchText, strategyContext);
 };
 
 // ============================================

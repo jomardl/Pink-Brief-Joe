@@ -15,6 +15,7 @@ import {
 import { performStrategicSynthesis } from '../aiService';
 import { BriefData, StrategicSection } from '../types';
 import { useBriefFlowStore } from '../lib/stores/briefFlowStore';
+import ConfirmDialog from './ConfirmDialog';
 
 interface Props {
   onNext: (data: Partial<BriefData>) => void;
@@ -26,15 +27,52 @@ interface Props {
 const TIMEOUT_MS = 90000; // 90 seconds for Claude's longer synthesis
 
 const StrategyModule: React.FC<Props> = ({ onNext, onBack, briefData, onProcessing }) => {
-  const { setMarketingSummary } = useBriefFlowStore();
-  const [sections, setSections] = useState<StrategicSection[]>(briefData.marketingSummarySections || []);
-  const [summaryMeta, setSummaryMeta] = useState({ essence: "Red Thread", unlock: "The Strategic Unlock" });
+  const {
+    setMarketingSummary,
+    marketingSummary: storeMarketingSummary,
+    pinkBrief,
+    insights: storeInsights,
+    selectedInsightId: storeSelectedInsightId,
+  } = useBriefFlowStore();
+
+  // Initialize from store's marketingSummary if available, otherwise from briefData props
+  const initialSections = storeMarketingSummary?.sections || briefData.marketingSummarySections || [];
+  const initialEssence = storeMarketingSummary?.red_thread_essence || briefData.redThreadEssence || "Red Thread";
+  const initialUnlock = storeMarketingSummary?.red_thread_unlock || "The Strategic Unlock";
+
+  const [sections, setSections] = useState<StrategicSection[]>(initialSections);
+  const [summaryMeta, setSummaryMeta] = useState({ essence: initialEssence, unlock: initialUnlock });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<string | null>(null);
 
+  // Track if strategy has been modified since viewing (for regenerate banner)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [showRegenerateConfirm, setShowRegenerateConfirm] = useState(false);
+
   const fetchAttempted = useRef(false);
+
+  // Check if a pink brief already exists (check both store and props)
+  const hasBrief = !!(
+    (pinkBrief && pinkBrief.business_objective) ||
+    (briefData.pinkBrief && briefData.pinkBrief.business_objective)
+  );
+
+  // Sync from store if it gets populated after mount (e.g., when loading a saved brief)
+  useEffect(() => {
+    if (storeMarketingSummary?.sections && storeMarketingSummary.sections.length > 0 && sections.length === 0) {
+      setSections(storeMarketingSummary.sections);
+      setSummaryMeta({
+        essence: storeMarketingSummary.red_thread_essence || "Red Thread",
+        unlock: storeMarketingSummary.red_thread_unlock || "The Strategic Unlock"
+      });
+      fetchAttempted.current = true; // Prevent synthesis from running
+      if (storeMarketingSummary.sections.length > 0) {
+        setExpandedSection(storeMarketingSummary.sections[0].id);
+      }
+    }
+  }, [storeMarketingSummary, sections.length]);
 
   const runSynthesis = async () => {
     setIsLoading(true);
@@ -87,9 +125,10 @@ const StrategyModule: React.FC<Props> = ({ onNext, onBack, briefData, onProcessi
 
   const updateSectionContent = (id: string, field: 'content' | 'summary', val: string) => {
     setSections(prev => prev.map(s => s.id === id ? { ...s, [field]: val } : s));
+    setHasUnsavedChanges(true);
   };
 
-  const handleFinish = () => {
+  const saveAndContinue = (shouldRegenerate: boolean) => {
     // Save marketing summary to store (auto-saves to DB)
     setMarketingSummary({
       red_thread_essence: summaryMeta.essence,
@@ -97,15 +136,65 @@ const StrategyModule: React.FC<Props> = ({ onNext, onBack, briefData, onProcessi
       sections: sections.map(s => ({
         id: s.id,
         title: s.title,
+        purpose: s.purpose,
+        summary: s.summary,
         content: s.content,
       })),
     });
 
+    // Get existing brief from store or props
+    const existingBrief = pinkBrief || briefData.pinkBrief;
+
+    // Get selectedInsight from props, or fall back to store
+    const effectiveSelectedInsight = briefData.selectedInsight || (() => {
+      if (storeSelectedInsightId != null && storeInsights.length > 0) {
+        const found = storeInsights.find(i => Number(i.id) === Number(storeSelectedInsightId));
+        if (found) {
+          return {
+            id: found.id,
+            insight_headline: found.insight_headline,
+            insight_text: found.insight_text,
+            verbatims: found.verbatims,
+            relevance_score: found.relevance_score,
+            tension_type: found.tension_type,
+            jtbd: found.jtbd,
+          };
+        }
+      }
+      return null;
+    })();
+
     onNext({
       marketingSummarySections: sections,
       redThreadEssence: summaryMeta.essence,
-      redThread: []
+      redThread: [],
+      // Preserve selectedInsight - required for brief generation
+      selectedInsight: effectiveSelectedInsight,
+      // Clear pinkBrief if regenerating so SummaryModule knows to generate new
+      // Otherwise preserve the existing brief
+      pinkBrief: shouldRegenerate ? null : existingBrief
     });
+  };
+
+  const handleContinue = () => {
+    if (hasBrief && !hasUnsavedChanges) {
+      // Brief exists and no edits made - just continue
+      saveAndContinue(false);
+    } else if (!hasBrief) {
+      // No brief exists - generate new one
+      saveAndContinue(true);
+    }
+    // If hasBrief && hasUnsavedChanges, the regenerate banner handles this
+  };
+
+  const handleRegenerateBrief = () => {
+    setShowRegenerateConfirm(true);
+  };
+
+  const confirmRegenerate = () => {
+    setShowRegenerateConfirm(false);
+    setHasUnsavedChanges(false);
+    saveAndContinue(true);
   };
 
   // Error state
@@ -302,16 +391,51 @@ const StrategyModule: React.FC<Props> = ({ onNext, onBack, briefData, onProcessi
         })}
       </div>
 
-      {/* Continue button */}
-      <div className="flex justify-end pt-4 border-t border-[#e0e0e0]">
-        <button
-          onClick={handleFinish}
-          className="h-12 px-6 bg-[#0f62fe] text-white text-sm font-medium flex items-center gap-2 hover:bg-[#0353e9] transition-colors"
-        >
-          Generate brief
-          <ArrowRight size={16} />
-        </button>
-      </div>
+      {/* Regenerate Brief Banner - shown when brief exists and strategy has been modified */}
+      {hasBrief && hasUnsavedChanges && (
+        <div className="mb-6 p-4 bg-[#fff1f1] border border-[#ffb3b8]">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-[#161616]">Strategy has been modified</p>
+              <p className="text-xs text-[#525252]">
+                Would you like to regenerate the Pink Brief based on your changes?
+              </p>
+            </div>
+            <button
+              onClick={handleRegenerateBrief}
+              className="h-10 px-4 bg-[#da1e28] text-white text-sm font-medium flex items-center gap-2 hover:bg-[#ba1b23] transition-colors"
+            >
+              <RefreshCcw size={16} />
+              Regenerate Brief
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Continue button - only show if no edits have been made, or no brief exists yet */}
+      {(!hasBrief || !hasUnsavedChanges) && (
+        <div className="flex justify-end pt-4 border-t border-[#e0e0e0]">
+          <button
+            onClick={handleContinue}
+            className="h-12 px-6 bg-[#0f62fe] text-white text-sm font-medium flex items-center gap-2 hover:bg-[#0353e9] transition-colors"
+          >
+            {hasBrief ? 'Continue to Brief' : 'Generate brief'}
+            <ArrowRight size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* Regenerate Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showRegenerateConfirm}
+        title="Regenerate Brief?"
+        message="This will create a new Pink Brief based on your updated strategy. The existing brief will be replaced."
+        confirmLabel="Regenerate"
+        cancelLabel="Cancel"
+        variant="warning"
+        onConfirm={confirmRegenerate}
+        onCancel={() => setShowRegenerateConfirm(false)}
+      />
     </div>
   );
 };
