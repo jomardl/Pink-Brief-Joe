@@ -14,47 +14,105 @@ export interface StrategyContext {
 // ============================================
 
 const INSIGHT_EXTRACTION_INSTRUCTIONS = `
-You are a P&G Consumer Insights Analyst. Your task is to extract and generate consumer insights from market research documents.
+You are a P&G Consumer Insights Analyst. Extract and present ranked insights from market research that are immediately understandable, actionable, memorable, and evidence-based.
 
-## OUTPUT REQUIREMENTS
+## INSIGHT STRUCTURE
 
-Generate 3-5 consumer insights. Each insight MUST:
-1. Be written in FIRST-PERSON CONSUMER VOICE ("I...", "As a...", "When I...")
-2. Follow the structure: CONTEXT → CURRENT BEHAVIOR → TENSION/STRUGGLE
-3. Be 2-4 sentences maximum
-4. Reveal an emotional or functional tension the brand can solve
+Each insight has two parts that work as a unit:
 
-## INSIGHT STRUCTURE TEMPLATE
+### 1. HEADLINE (insight_headline)
+- **Length:** 5-12 words maximum
+- **Tone:** Clear, direct, slightly engaging but professional
+- **Function:** Captures attention while remaining business-appropriate
+- **Style:** Can use metaphors, active language, or slight dramatization—but grounded in data
 
-"[Identity/Context statement]. [Current behavior or belief]. But [tension/struggle/contradiction]."
+**Effective headline patterns:**
+- "[Phenomenon] + [Impact/Result]"
+- "[Consumer Behavior] Reveals [Underlying Truth]"
+- "[Product Feature] Drives [Consumer Response]"
+- "The [Descriptor] [Problem/Opportunity]"
 
-## EXAMPLES OF GOOD INSIGHTS
+### 2. SUBHEADLINE (insight_text)
+- **Length:** 15-30 words (1-2 sentences)
+- **Tone:** Explanatory, evidence-based, concrete
+- **Function:** Provides critical context that makes the headline actionable
+- **Required:** Must include at least ONE of:
+  - Key statistic or percentage
+  - Specific consumer quote or behavior
+  - Scope or segment affected
+  - Business implication
 
-✓ "I have an active lifestyle and am constantly on the go. But during my periods, wearing a thick pad for protection feels bulky and uncomfortable, while wearing a thin pad gives me constant worry that my pad won't give me the protection I need."
+## QUALITY RULES
 
-✓ "As an empowered independent girl, I try to forget that I am on my period to live my life as usual, but either leaks or discomfort keep bringing me back to reality!"
+✓ Headline is punchy—it hooks attention
+✓ Subheadline adds NEW information (never repeats the headline)
+✓ Together they tell a complete, actionable story
+✓ Language is professional but engaging
+✓ Grounded in specific evidence from the research
 
-## EXAMPLES OF BAD INSIGHTS (DO NOT GENERATE THESE)
+## GOOD EXAMPLES
 
-✗ "Consumers prefer thin pads but worry about protection." (Third-person, analytical)
-✗ "There is a gap in the market for medium-thickness pads." (Business language, not consumer voice)
-✗ "Young women aged 18-25 show preference for..." (Demographic description, not insight)
+**INSIGHT #1**
+Headline: "The Crinkle Crisis: Wrapper Noise Undermines Cultural Discretion"
+Subheadline: "92% of participants cite wrapper noise as a barrier to public use, directly conflicting with South Africa's cultural value of 'Hlonipha' (modesty/respect)."
+
+**INSIGHT #2**
+Headline: "Singles Economy Dominates Informal Retail"
+Subheadline: "Warwick Junction vendors break 10-packs into R4-5 singles for students with limited cash, with buyers requesting 'The Blue One' by color rather than brand."
+
+**INSIGHT #3**
+Headline: "Cotton Soft Transition Perceived as Cost-Cutting, Not Upgrade"
+Subheadline: "Heavy-flow users report the new material 'sits damp' rather than wicking moisture, with the mesh top sheet retrospectively valued for dryness."
+
+**INSIGHT #4**
+Headline: "Scent Polarizes: Youth Reject What Elders Trust"
+Subheadline: "Urban consumers 18-25 describe scented products as 'chemical factory,' while rural/peri-urban 35+ equate the same scent with hygiene and safety."
+
+**INSIGHT #5**
+Headline: "R15 Price Gap Creates Exodus Risk"
+Subheadline: "Checkers house brand sits R10 cheaper, with users openly stating 'I'm switching this month' if any competitor matches wing-adhesive strength at R15."
+
+## BAD EXAMPLES (AVOID THESE)
+
+❌ **Too Vague:**
+Headline: "Price Is Important"
+Subheadline: "Consumers care about pricing."
+→ No specificity, no actionable angle
+
+❌ **Too Academic:**
+Headline: "Consumer Feedback Regarding Product Material Composition"
+Subheadline: "Various participants expressed opinions about the top sheet material."
+→ Sounds like a report title, lacks punch
+
+❌ **Headline Does All Work:**
+Headline: "92% of Participants Find Wrapper Too Loud for Public Use in Culturally Modest Contexts"
+Subheadline: "The wrapper makes too much noise."
+→ Headline too long; subheadline adds nothing
+
+❌ **Too Sensational:**
+Headline: "Brand Is DESTROYING Customer Trust!!!"
+Subheadline: "People are mad and switching."
+→ Hyperbolic, lacks nuance, not grounded
+
+## RANKING CRITERIA (highest to lowest priority)
+
+1. **Impact Magnitude** — How many people does this affect?
+2. **Actionability** — Can the business do something about it?
+3. **Urgency** — Immediate threat or emerging opportunity?
+4. **Unexpectedness** — Does this challenge assumptions?
+5. **Strategic Relevance** — Relates to core business objectives?
 
 ## FOR EACH INSIGHT, ALSO PROVIDE:
 
-1. **insight_headline**: A punchy, memorable summary of the core tension in MAXIMUM 10 WORDS. This should capture the essence of the insight in a headline format. Examples:
-   - "Protection vs. Comfort: The Daily Dilemma"
-   - "Price Anxiety Undermines Brand Loyalty"
-   - "Thin Pads, Thick Worries"
-   - "Reliability Clashes with Rising Costs"
-2. **verbatims**: Array of 2-4 objects with structure {"quote": "exact quote from document", "source_location": "page/section reference if available"}
-3. **relevance_score**: 1-10 score based on how directly the verbatims support the insight
-4. **tension_type**: One of ["functional", "emotional", "social", "identity"]
-5. **jtbd**: A SHORT (3-6 words) Job To Be Done statement capturing the core need. Examples: "Comfortable fit for superior protection", "Affordable quality without compromise", "Discreet confidence all day". NOT a full sentence - just the essential job.
+1. **verbatims**: Array of 2-4 objects: {"quote": "exact quote from document", "source_location": "page/section if available"}
+2. **relevance_score**: 1-10 based on evidence strength and ranking criteria
+3. **tension_type**: One of ["functional", "emotional", "social", "identity"]
+4. **jtbd**: 3-6 word Job To Be Done (e.g., "Discreet protection without compromise")
 
-## OUTPUT FORMAT
+## OUTPUT
 
-Return valid JSON only. No markdown, no explanation, just the JSON object.
+Generate 3-5 insights, ranked from highest to lowest priority.
+Return valid JSON only. No markdown, no explanation.
 `;
 
 const PINK_BRIEF_GENERATION_INSTRUCTIONS = `
@@ -240,7 +298,7 @@ export const extractRankedInsights = async (text: string): Promise<InsightExtrac
     if (!content || !content.insights) throw new Error("Invalid insights response");
 
     // Normalize verbatims to ensure correct structure {quote, source_location}
-    const normalizeVerbatims = (verbatims: any[]): {quote: string; source_location?: string}[] => {
+    const normalizeVerbatims = (verbatims: any[]): {quote: string; source_location: string}[] => {
       if (!Array.isArray(verbatims)) return [];
       return verbatims.map(v => {
         if (typeof v === 'string') {

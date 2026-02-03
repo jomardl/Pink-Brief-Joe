@@ -192,7 +192,7 @@ const ProductSelector: React.FC<Props> = ({ onSelect, onContinue, initialValue, 
 
               {Object.entries(products).map(([brand, brandProducts]) => (
                 <optgroup key={brand} label={brand}>
-                  {brandProducts.map((product) => (
+                  {(brandProducts as Product[]).map((product) => (
                     <option key={product.id} value={product.id}>
                       {product.name}
                       {product.market && ` (${product.market})`}
@@ -250,7 +250,7 @@ const ProductSelector: React.FC<Props> = ({ onSelect, onContinue, initialValue, 
             <p className="text-sm font-medium text-[#161616] flex items-center gap-2">
               <Package size={14} />
               {isOther ? otherName : (
-                Object.values(products).flat().find(p => p.id === selectedId)?.name || 'Unknown'
+                (Object.values(products).flat() as Product[]).find(p => p.id === selectedId)?.name || 'Unknown'
               )}
             </p>
           </motion.div>

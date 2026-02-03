@@ -121,7 +121,7 @@ export const briefService = {
 
     const { data, error } = await supabase
       .from('briefs')
-      .insert(insertData)
+      .insert(insertData as any)
       .select()
       .single();
 
@@ -130,7 +130,7 @@ export const briefService = {
       throw error;
     }
 
-    return data;
+    return data as Brief;
   },
 
   // Update brief (partial update)
@@ -144,7 +144,7 @@ export const briefService = {
       updates.completed_at = new Date().toISOString();
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('briefs')
       .update(updates)
       .eq('id', id)
@@ -156,7 +156,7 @@ export const briefService = {
       throw error;
     }
 
-    return data;
+    return data as Brief;
   },
 
   // Archive brief (soft delete)
@@ -165,7 +165,7 @@ export const briefService = {
       throw new Error('Supabase not configured');
     }
 
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('briefs')
       .update({ status: 'archived' })
       .eq('id', id);
@@ -198,7 +198,7 @@ export const briefService = {
         selected_insight_id: original.selected_insight_id,
         marketing_summary: original.marketing_summary,
         pink_brief: original.pink_brief
-      })
+      } as any)
       .select()
       .single();
 
@@ -207,6 +207,6 @@ export const briefService = {
       throw error;
     }
 
-    return data;
+    return data as Brief;
   }
 };

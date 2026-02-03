@@ -39,7 +39,7 @@ export const productService = {
   // Get unique brands
   async getBrands(): Promise<string[]> {
     const products = await this.getAll();
-    return [...new Set(products.map(p => p.brand))].sort();
+    return [...new Set(products.map(p => p.brand))] as string[];
   },
 
   // Create new product
@@ -50,7 +50,7 @@ export const productService = {
 
     const { data, error } = await supabase
       .from('products')
-      .insert(product)
+      .insert(product as any)
       .select()
       .single();
 
@@ -62,7 +62,7 @@ export const productService = {
       throw error;
     }
 
-    return data;
+    return data as Product;
   },
 
   // Check if product name exists
@@ -91,7 +91,7 @@ export const productService = {
       throw new Error('Supabase not configured');
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await (supabase as any)
       .from('products')
       .update(updates)
       .eq('id', id)
@@ -103,7 +103,7 @@ export const productService = {
       throw error;
     }
 
-    return data;
+    return data as Product;
   },
 
   // Soft delete product
@@ -112,7 +112,7 @@ export const productService = {
       throw new Error('Supabase not configured');
     }
 
-    const { error } = await supabase
+    const { error } = await (supabase as any)
       .from('products')
       .update({ is_active: false })
       .eq('id', id);

@@ -10,6 +10,7 @@ import type {
   PinkBriefData,
   ExtractedInsightDB
 } from '../supabase/types';
+import type { PinkBriefContent } from '../../types';
 
 export type FlowStep = 'product' | 'upload' | 'insights' | 'strategy' | 'brief';
 
@@ -63,7 +64,7 @@ interface BriefFlowState {
   setInsightsData: (categoryContext: string, insights: ExtractedInsightDB[]) => void;
   selectInsight: (insightId: number) => void;
   setMarketingSummary: (summary: MarketingSummary) => void;
-  setPinkBrief: (brief: PinkBriefData) => void;
+  setPinkBrief: (brief: PinkBriefContent) => void;
 
   // Reset
   reset: () => void;

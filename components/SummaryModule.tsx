@@ -22,10 +22,14 @@ interface Props {
   storedModelUsed?: string | null; // model from database when viewing saved brief
 }
 
+// P&G Brand Colors
+const PG_PINK = '#C91A8D';
+const PG_PINK_DARK = '#9C1A6D';
+const PG_PINK_LIGHT = '#FCE4EC';
+
 const SectionHeader = ({ title }: { title: string }) => (
-  <div className="flex items-center gap-3 mb-4">
-    <div className="w-1 h-6 bg-[#0f62fe]" />
-    <h3 className="text-sm font-medium text-[#161616] uppercase tracking-wider">{title}</h3>
+  <div className="py-3 px-4 -mx-6 -mt-6 mb-4" style={{ backgroundColor: PG_PINK }}>
+    <h3 className="text-sm font-semibold text-white uppercase tracking-wider">{title}</h3>
   </div>
 );
 
@@ -41,12 +45,13 @@ const FieldRow = ({
   isEditing: boolean;
 }) => (
   <div className="flex items-baseline gap-3 py-2">
-    <span className="text-sm font-medium text-[#0f62fe] shrink-0 w-48">{label}</span>
+    <span className="text-sm font-semibold shrink-0 w-48" style={{ color: PG_PINK }}>{label}</span>
     {isEditing ? (
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="flex-1 text-sm text-[#161616] bg-[#f4f4f4] border border-[#e0e0e0] px-2 py-1 focus:border-[#0f62fe] focus:outline-none"
+        className="flex-1 text-sm text-[#161616] bg-[#f4f4f4] border border-[#e0e0e0] px-2 py-1 focus:outline-none"
+        style={{ borderColor: isEditing ? PG_PINK : '#e0e0e0' }}
       />
     ) : (
       <span className="flex-1 text-sm text-[#161616]">{value}</span>
@@ -950,12 +955,12 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
   if (isLoading) {
     return (
       <div className="max-w-lg mx-auto py-16 text-center">
-        <div className="w-16 h-16 bg-[#edf5ff] flex items-center justify-center mx-auto mb-6">
-          <Loader2 size={32} className="text-[#0f62fe] animate-spin" />
+        <div className="w-16 h-16 flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: PG_PINK_LIGHT }}>
+          <Loader2 size={32} className="animate-spin" style={{ color: PG_PINK }} />
         </div>
         <h3 className="text-2xl font-light text-[#161616] mb-2">Generating brief</h3>
         <p className="text-sm text-[#525252]">
-          Creating your Pink Brief document...
+          Creating your Superior Communication Brief...
         </p>
       </div>
     );
@@ -972,7 +977,8 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         {effectiveSelectedInsight && (
           <button
             onClick={runGeneration}
-            className="h-10 px-6 bg-[#0f62fe] text-white text-sm font-medium hover:bg-[#0353e9] transition-colors"
+            className="h-10 px-6 text-white text-sm font-medium transition-colors"
+            style={{ backgroundColor: PG_PINK }}
           >
             Try Again
           </button>
@@ -984,8 +990,8 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
   if (!content) {
     return (
       <div className="max-w-lg mx-auto py-16 text-center">
-        <div className="w-16 h-16 bg-[#fff8e1] flex items-center justify-center mx-auto mb-6">
-          <FileText size={32} className="text-[#f57f17]" />
+        <div className="w-16 h-16 flex items-center justify-center mx-auto mb-6" style={{ backgroundColor: PG_PINK_LIGHT }}>
+          <FileText size={32} style={{ color: PG_PINK }} />
         </div>
         <h3 className="text-2xl font-light text-[#161616] mb-2">Brief content not available</h3>
         <p className="text-sm text-[#525252] mb-6">
@@ -996,7 +1002,8 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         {effectiveSelectedInsight && (
           <button
             onClick={runGeneration}
-            className="h-10 px-6 bg-[#0f62fe] text-white text-sm font-medium hover:bg-[#0353e9] transition-colors"
+            className="h-10 px-6 text-white text-sm font-medium transition-colors"
+            style={{ backgroundColor: PG_PINK }}
           >
             Regenerate Brief
           </button>
@@ -1009,17 +1016,17 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
     <div className="max-w-4xl mx-auto">
       <div ref={contentRef}>
         {/* Header */}
-        <div className="mb-8 pb-6 border-b border-[#e0e0e0]">
+        <div className="mb-8 pb-6 border-b-2" style={{ borderColor: PG_PINK }}>
           <div className="flex items-start justify-between">
             <div>
               <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">
                 Step 5 — Final Output
               </p>
-              <h2 className="text-3xl font-light text-[#161616] tracking-tight">
-                P&G Pink Brief
+              <h2 className="text-3xl font-semibold tracking-tight" style={{ color: PG_PINK }}>
+                Superior Communication Brief
               </h2>
             </div>
-            <span className="text-xs font-mono px-3 py-1 bg-[#fff1f1] text-[#da1e28]">
+            <span className="text-xs font-mono px-3 py-1 text-white" style={{ backgroundColor: PG_PINK_DARK }}>
               Confidential
             </span>
           </div>
@@ -1035,18 +1042,18 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
             {modelUsed && (
               <span className="flex items-center gap-1.5">
                 <Cpu size={12} />
-                <span>Generated with: <span className="px-1.5 py-0.5 bg-[#e8daff] text-[#6929c4] rounded font-medium">{modelUsed === 'claude' ? 'Claude' : 'Gemini'}</span></span>
+                <span>Generated with: <span className="px-1.5 py-0.5 rounded font-medium text-white" style={{ backgroundColor: PG_PINK }}>{modelUsed === 'claude' ? 'Claude' : 'Gemini'}</span></span>
               </span>
             )}
           </div>
         </div>
 
         {/* Business Objective */}
-        <section className="mb-6 p-6 bg-white border border-[#e0e0e0]">
-          <div className="flex items-center justify-between mb-4">
+        <section className="mb-6 p-6 pt-0 bg-white border border-[#e0e0e0] overflow-hidden">
+          <div className="flex items-center justify-between">
             <SectionHeader title="Who-Inspired Business Objective" />
             {editingSection === 'business' ? (
-              <div className="flex items-center gap-2 print:hidden">
+              <div className="flex items-center gap-2 print:hidden -mt-2">
                 <button
                   onClick={cancelEdit}
                   className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
@@ -1055,7 +1062,8 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
                 </button>
                 <button
                   onClick={saveEdit}
-                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                  className="px-3 py-1.5 text-xs text-white transition-colors"
+                  style={{ backgroundColor: PG_PINK }}
                 >
                   Save
                 </button>
@@ -1063,7 +1071,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
             ) : (
               <button
                 onClick={() => startEdit('business')}
-                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
+                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden -mt-2"
               >
                 <Edit2 size={16} />
               </button>
@@ -1098,11 +1106,11 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         </section>
 
         {/* Consumer Problem */}
-        <section className="mb-6 p-6 bg-white border border-[#e0e0e0]">
-          <div className="flex items-center justify-between mb-4">
-            <SectionHeader title="Consumer's Problem to Solve" />
+        <section className="mb-6 p-6 pt-0 bg-white border border-[#e0e0e0] overflow-hidden">
+          <div className="flex items-center justify-between">
+            <SectionHeader title="Our Opportunity - The Consumer's Problem to Solve" />
             {editingSection === 'consumer' ? (
-              <div className="flex items-center gap-2 print:hidden">
+              <div className="flex items-center gap-2 print:hidden -mt-2">
                 <button
                   onClick={cancelEdit}
                   className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
@@ -1111,7 +1119,8 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
                 </button>
                 <button
                   onClick={saveEdit}
-                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                  className="px-3 py-1.5 text-xs text-white transition-colors"
+                  style={{ backgroundColor: PG_PINK }}
                 >
                   Save
                 </button>
@@ -1119,7 +1128,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
             ) : (
               <button
                 onClick={() => startEdit('consumer')}
-                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
+                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden -mt-2"
               >
                 <Edit2 size={16} />
               </button>
@@ -1148,11 +1157,11 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         </section>
 
         {/* Communication Challenge */}
-        <section className="mb-6 p-6 bg-white border border-[#e0e0e0]">
-          <div className="flex items-center justify-between mb-4">
-            <SectionHeader title="Communication Challenge" />
+        <section className="mb-6 p-6 pt-0 bg-white border border-[#e0e0e0] overflow-hidden">
+          <div className="flex items-center justify-between">
+            <SectionHeader title="So Our Communication Challenge is" />
             {editingSection === 'comm' ? (
-              <div className="flex items-center gap-2 print:hidden">
+              <div className="flex items-center gap-2 print:hidden -mt-2">
                 <button
                   onClick={cancelEdit}
                   className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
@@ -1161,7 +1170,8 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
                 </button>
                 <button
                   onClick={saveEdit}
-                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                  className="px-3 py-1.5 text-xs text-white transition-colors"
+                  style={{ backgroundColor: PG_PINK }}
                 >
                   Save
                 </button>
@@ -1169,40 +1179,40 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
             ) : (
               <button
                 onClick={() => startEdit('comm')}
-                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
+                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden -mt-2"
               >
                 <Edit2 size={16} />
               </button>
             )}
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-[#f4f4f4] border-l-2 border-[#da1e28]">
-              <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">From</p>
+            <div className="p-4 bg-[#f4f4f4] border-l-4" style={{ borderColor: PG_PINK }}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: PG_PINK }}>Take her from</p>
               {editingSection === 'comm' ? (
                 <textarea
                   value={content.communication_challenge.from_state}
                   onChange={(e) => updateNestedField('communication_challenge', 'from_state', e.target.value)}
-                  className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none focus:border-[#0f62fe] resize-none h-20"
+                  className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none resize-none h-20"
                 />
               ) : (
-                <p className="text-sm text-[#525252] italic">{content.communication_challenge.from_state}</p>
+                <p className="text-sm text-[#525252] italic">"{content.communication_challenge.from_state}"</p>
               )}
             </div>
-            <div className="p-4 bg-[#f4f4f4] border-l-2 border-[#24a148]">
-              <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">To</p>
+            <div className="p-4 bg-[#f4f4f4] border-l-4 border-[#24a148]">
+              <p className="text-xs font-semibold text-[#24a148] uppercase tracking-wider mb-2">To</p>
               {editingSection === 'comm' ? (
                 <textarea
                   value={content.communication_challenge.to_state}
                   onChange={(e) => updateNestedField('communication_challenge', 'to_state', e.target.value)}
-                  className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none focus:border-[#0f62fe] resize-none h-20"
+                  className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none resize-none h-20"
                 />
               ) : (
-                <p className="text-sm text-[#525252] italic">{content.communication_challenge.to_state}</p>
+                <p className="text-sm text-[#525252] italic">"{content.communication_challenge.to_state}"</p>
               )}
             </div>
           </div>
-          <div className="mt-4 p-4 bg-[#edf5ff]">
-            <p className="text-xs font-mono text-[#0f62fe] uppercase tracking-wider mb-2">Bridge / Analogy</p>
+          <div className="mt-4 p-4" style={{ backgroundColor: PG_PINK_LIGHT }}>
+            <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: PG_PINK }}>Our communication needs to</p>
             {editingSection === 'comm' ? (
               <input
                 value={content.communication_challenge.analogy_or_device}
@@ -1216,23 +1226,21 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         </section>
 
         {/* Message Strategy */}
-        <section className="mb-6 p-6 bg-[#161616] text-white">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="w-1 h-6 bg-[#0f62fe]" />
-              <h3 className="text-sm font-medium uppercase tracking-wider">Communication Message Strategy</h3>
-            </div>
+        <section className="mb-6 p-6 pt-0 bg-white border border-[#e0e0e0] overflow-hidden">
+          <div className="flex items-center justify-between">
+            <SectionHeader title="Our Communication Message Strategy that Solves the Problem" />
             {editingSection === 'message' ? (
-              <div className="flex items-center gap-2 print:hidden">
+              <div className="flex items-center gap-2 print:hidden -mt-2">
                 <button
                   onClick={cancelEdit}
-                  className="px-3 py-1.5 text-xs text-[#a8a8a8] hover:text-white hover:bg-[#393939] transition-colors"
+                  className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={saveEdit}
-                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                  className="px-3 py-1.5 text-xs text-white transition-colors"
+                  style={{ backgroundColor: PG_PINK }}
                 >
                   Save
                 </button>
@@ -1240,7 +1248,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
             ) : (
               <button
                 onClick={() => startEdit('message')}
-                className="p-2 text-[#a8a8a8] hover:text-white transition-colors print:hidden"
+                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden -mt-2"
               >
                 <Edit2 size={16} />
               </button>
@@ -1248,50 +1256,50 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
           </div>
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-1">Benefit</p>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: PG_PINK }}>Benefit</p>
               {editingSection === 'message' ? (
                 <input
                   value={content.message_strategy.benefit}
                   onChange={(e) => updateNestedField('message_strategy', 'benefit', e.target.value)}
-                  className="w-full p-2 bg-[#393939] border border-[#525252] text-white text-lg focus:outline-none focus:border-[#0f62fe]"
+                  className="w-full p-2 bg-[#f4f4f4] border border-[#e0e0e0] text-[#161616] text-lg focus:outline-none"
                 />
               ) : (
-                <p className="text-xl font-medium">{content.message_strategy.benefit}</p>
+                <p className="text-lg font-medium text-[#161616]">{content.message_strategy.benefit}</p>
               )}
             </div>
             <div>
-              <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-1">Reason To Believe</p>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: PG_PINK }}>RTB (Reason To Believe)</p>
               {editingSection === 'message' ? (
                 <input
                   value={content.message_strategy.rtb}
                   onChange={(e) => updateNestedField('message_strategy', 'rtb', e.target.value)}
-                  className="w-full p-2 bg-[#393939] border border-[#525252] text-white focus:outline-none focus:border-[#0f62fe]"
+                  className="w-full p-2 bg-[#f4f4f4] border border-[#e0e0e0] text-[#161616] focus:outline-none"
                 />
               ) : (
-                <p className="text-sm text-[#c6c6c6]">{content.message_strategy.rtb}</p>
+                <p className="text-sm text-[#525252]">{content.message_strategy.rtb}</p>
               )}
             </div>
             <div>
-              <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-1">Brand Character</p>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: PG_PINK }}>Brand Character</p>
               {editingSection === 'message' ? (
                 <input
                   value={content.message_strategy.brand_character}
                   onChange={(e) => updateNestedField('message_strategy', 'brand_character', e.target.value)}
-                  className="w-full p-2 bg-[#393939] border border-[#525252] text-white focus:outline-none focus:border-[#0f62fe]"
+                  className="w-full p-2 bg-[#f4f4f4] border border-[#e0e0e0] text-[#161616] focus:outline-none"
                 />
               ) : (
-                <p className="text-sm text-[#c6c6c6] italic">{content.message_strategy.brand_character}</p>
+                <p className="text-sm text-[#525252] italic">{content.message_strategy.brand_character}</p>
               )}
             </div>
           </div>
         </section>
 
         {/* Insights */}
-        <section className="mb-6 p-6 bg-white border border-[#e0e0e0]">
-          <div className="flex items-center justify-between mb-4">
-            <SectionHeader title="Consumer Insights" />
+        <section className="mb-6 p-6 pt-0 bg-white border border-[#e0e0e0] overflow-hidden">
+          <div className="flex items-center justify-between">
+            <SectionHeader title="Insight(s) or Truth(s) That Could Inspire Heart and/or Mind-Opening Advertising" />
             {editingSection === 'insights' ? (
-              <div className="flex items-center gap-2 print:hidden">
+              <div className="flex items-center gap-2 print:hidden -mt-2">
                 <button
                   onClick={cancelEdit}
                   className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
@@ -1300,7 +1308,8 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
                 </button>
                 <button
                   onClick={saveEdit}
-                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
+                  className="px-3 py-1.5 text-xs text-white transition-colors"
+                  style={{ backgroundColor: PG_PINK }}
                 >
                   Save
                 </button>
@@ -1308,7 +1317,7 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
             ) : (
               <button
                 onClick={() => startEdit('insights')}
-                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
+                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden -mt-2"
               >
                 <Edit2 size={16} />
               </button>
@@ -1316,18 +1325,18 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
           </div>
           <div className="space-y-4">
             {content.insights.map((insight, idx) => (
-              <div key={idx} className="p-4 bg-[#f4f4f4] border-l-2 border-[#0f62fe]">
-                <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">
+              <div key={idx} className="p-4 bg-[#f4f4f4] border-l-4" style={{ borderColor: PG_PINK }}>
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: PG_PINK }}>
                   Insight {insight.insight_number}
                 </p>
                 {editingSection === 'insights' ? (
                   <textarea
                     value={insight.insight_text}
                     onChange={(e) => updateInsight(idx, e.target.value)}
-                    className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] italic focus:outline-none focus:border-[#0f62fe] resize-none h-20"
+                    className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] italic focus:outline-none resize-none h-20"
                   />
                 ) : (
-                  <p className="text-sm text-[#161616] italic">"{insight.insight_text}"</p>
+                  <p className="text-sm text-[#161616]">{insight.insight_text}</p>
                 )}
               </div>
             ))}
@@ -1335,130 +1344,125 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
         </section>
 
         {/* Execution */}
-        <section className="mb-6 p-6 bg-white border border-[#e0e0e0]">
-          <div className="flex items-center justify-between mb-4">
-            <SectionHeader title="Execution Guidance" />
-            {editingSection === 'execution' ? (
-              <div className="flex items-center gap-2 print:hidden">
+        <section className="mb-6 bg-white border border-[#e0e0e0] overflow-hidden">
+          <div className="p-6 pt-0">
+            <div className="flex items-center justify-between">
+              <SectionHeader title="Execution Guidance" />
+              {editingSection === 'execution' ? (
+                <div className="flex items-center gap-2 print:hidden -mt-2">
+                  <button
+                    onClick={cancelEdit}
+                    className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={saveEdit}
+                    className="px-3 py-1.5 text-xs text-white transition-colors"
+                    style={{ backgroundColor: PG_PINK }}
+                  >
+                    Save
+                  </button>
+                </div>
+              ) : (
                 <button
-                  onClick={cancelEdit}
-                  className="px-3 py-1.5 text-xs text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors"
+                  onClick={() => startEdit('execution')}
+                  className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden -mt-2"
                 >
-                  Cancel
+                  <Edit2 size={16} />
                 </button>
-                <button
-                  onClick={saveEdit}
-                  className="px-3 py-1.5 text-xs bg-[#0f62fe] text-white hover:bg-[#0353e9] transition-colors"
-                >
-                  Save
-                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="p-4 bg-[#f4f4f4]">
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: PG_PINK }}>Key Media</p>
+                {editingSection === 'execution' ? (
+                  <input
+                    value={content.execution.key_media.join(', ')}
+                    onChange={(e) => updateExecutionArray('key_media', e.target.value)}
+                    className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none"
+                    placeholder="Separate with commas"
+                  />
+                ) : (
+                  <p className="text-sm text-[#161616]">{content.execution.key_media.join(' & ')}</p>
+                )}
               </div>
-            ) : (
-              <button
-                onClick={() => startEdit('execution')}
-                className="p-2 text-[#6f6f6f] hover:text-[#161616] hover:bg-[#f4f4f4] transition-colors print:hidden"
-              >
-                <Edit2 size={16} />
-              </button>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            <div className="p-4 bg-[#f4f4f4]">
-              <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">Key Media</p>
-              {editingSection === 'execution' ? (
-                <input
-                  value={content.execution.key_media.join(', ')}
-                  onChange={(e) => updateExecutionArray('key_media', e.target.value)}
-                  className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none focus:border-[#0f62fe]"
-                  placeholder="Separate with commas"
-                />
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {content.execution.key_media.map((media, idx) => (
-                    <span key={idx} className="px-2 py-1 bg-[#e0e0e0] text-xs font-medium text-[#161616]">
-                      {media}
-                    </span>
-                  ))}
-                </div>
-              )}
+              <div className="p-4 bg-[#f4f4f4]">
+                <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: PG_PINK }}>Campaign & Assets</p>
+                {editingSection === 'execution' ? (
+                  <input
+                    value={content.execution.campaign_pillars.join(', ')}
+                    onChange={(e) => updateExecutionArray('campaign_pillars', e.target.value)}
+                    className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none"
+                    placeholder="Separate with commas"
+                  />
+                ) : (
+                  <p className="text-sm text-[#161616]">{content.execution.campaign_pillars.join('. ')}</p>
+                )}
+              </div>
             </div>
-            <div className="p-4 bg-[#f4f4f4]">
-              <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">Campaign Pillars</p>
+
+            <div className="p-4 bg-[#f4f4f4] mb-4">
+              <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: PG_PINK }}>Key Considerations</p>
               {editingSection === 'execution' ? (
-                <input
-                  value={content.execution.campaign_pillars.join(', ')}
-                  onChange={(e) => updateExecutionArray('campaign_pillars', e.target.value)}
-                  className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none focus:border-[#0f62fe]"
-                  placeholder="Separate with commas"
+                <textarea
+                  value={content.execution.key_considerations}
+                  onChange={(e) => updateNestedField('execution', 'key_considerations', e.target.value)}
+                  className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none resize-none h-16"
                 />
               ) : (
-                <div className="flex flex-wrap gap-2">
-                  {content.execution.campaign_pillars.map((pillar, idx) => (
-                    <span key={idx} className="px-2 py-1 bg-[#0f62fe] text-xs font-medium text-white">
-                      {pillar}
-                    </span>
-                  ))}
-                </div>
+                <p className="text-sm text-[#525252]">{content.execution.key_considerations}</p>
               )}
             </div>
           </div>
 
-          <div className="p-4 bg-[#f4f4f4] mb-4">
-            <p className="text-xs font-mono text-[#6f6f6f] uppercase tracking-wider mb-2">Key Considerations</p>
-            {editingSection === 'execution' ? (
-              <textarea
-                value={content.execution.key_considerations}
-                onChange={(e) => updateNestedField('execution', 'key_considerations', e.target.value)}
-                className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none focus:border-[#0f62fe] resize-none h-16"
-              />
-            ) : (
-              <p className="text-sm text-[#525252]">{content.execution.key_considerations}</p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="p-4 bg-[#edf5ff]">
-              <p className="text-xs font-mono text-[#0f62fe] uppercase tracking-wider mb-2">Business Success</p>
-              {editingSection === 'execution' ? (
-                <input
-                  value={content.execution.success_measures.business}
-                  onChange={(e) => setContent({
-                    ...content,
-                    execution: {
-                      ...content.execution,
-                      success_measures: {
-                        ...content.execution.success_measures,
-                        business: e.target.value
+          {/* Success Measures - Dark pink background like in the PDF */}
+          <div className="p-6" style={{ backgroundColor: PG_PINK_DARK }}>
+            <p className="text-xs font-semibold text-white uppercase tracking-wider mb-4">Success Measures</p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-1">Business</p>
+                {editingSection === 'execution' ? (
+                  <input
+                    value={content.execution.success_measures.business}
+                    onChange={(e) => setContent({
+                      ...content,
+                      execution: {
+                        ...content.execution,
+                        success_measures: {
+                          ...content.execution.success_measures,
+                          business: e.target.value
+                        }
                       }
-                    }
-                  })}
-                  className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none focus:border-[#0f62fe]"
-                />
-              ) : (
-                <p className="text-sm font-medium text-[#161616]">{content.execution.success_measures.business}</p>
-              )}
-            </div>
-            <div className="p-4 bg-[#defbe6]">
-              <p className="text-xs font-mono text-[#24a148] uppercase tracking-wider mb-2">Equity Success</p>
-              {editingSection === 'execution' ? (
-                <input
-                  value={content.execution.success_measures.equity}
-                  onChange={(e) => setContent({
-                    ...content,
-                    execution: {
-                      ...content.execution,
-                      success_measures: {
-                        ...content.execution.success_measures,
-                        equity: e.target.value
+                    })}
+                    className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none"
+                  />
+                ) : (
+                  <p className="text-sm font-medium text-white">{content.execution.success_measures.business}</p>
+                )}
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-white/80 uppercase tracking-wider mb-1">Equity</p>
+                {editingSection === 'execution' ? (
+                  <input
+                    value={content.execution.success_measures.equity}
+                    onChange={(e) => setContent({
+                      ...content,
+                      execution: {
+                        ...content.execution,
+                        success_measures: {
+                          ...content.execution.success_measures,
+                          equity: e.target.value
+                        }
                       }
-                    }
-                  })}
-                  className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none focus:border-[#0f62fe]"
-                />
-              ) : (
-                <p className="text-sm font-medium text-[#161616]">{content.execution.success_measures.equity}</p>
-              )}
+                    })}
+                    className="w-full p-2 bg-white border border-[#e0e0e0] text-sm text-[#161616] focus:outline-none"
+                  />
+                ) : (
+                  <p className="text-sm font-medium text-white">{content.execution.success_measures.equity}</p>
+                )}
+              </div>
             </div>
           </div>
         </section>
@@ -1575,11 +1579,10 @@ const SummaryModule: React.FC<Props> = ({ briefData, onReset, onProcessing, isAl
             <button
               onClick={handleSaveBrief}
               disabled={isSavingBrief || showSaveSuccess}
-              className={`h-10 px-4 text-white text-sm font-medium flex items-center gap-2 transition-colors ${
-                showSaveSuccess
-                  ? 'bg-[#24a148] cursor-default'
-                  : 'bg-[#24a148] hover:bg-[#198038] disabled:bg-[#c6c6c6]'
+              className={`h-10 px-4 text-white text-sm font-medium flex items-center gap-2 transition-colors disabled:bg-[#c6c6c6] ${
+                showSaveSuccess ? 'cursor-default' : ''
               }`}
+              style={{ backgroundColor: showSaveSuccess ? '#24a148' : PG_PINK }}
             >
               {isSavingBrief ? (
                 <Loader2 size={14} className="animate-spin" />
